@@ -5,7 +5,9 @@ import { Icon } from './Icon';
 
 export const DOC_KIND: Record<Doc['kind'], string> = {
   resumen: 'Resúmenes de llamadas',
-  estrategia: 'Estrategia',
+  reporte: 'Reportes semanales',
+  objetivos: 'Objetivos',
+  estrategia: 'Estrategia y documentos',
   diagnostico: 'Diagnósticos',
   sop: 'SOPs',
   nota: 'Notas',

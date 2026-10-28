@@ -105,7 +105,7 @@ create table if not exists documents (
   org_id     uuid not null references organizations(id) on delete cascade,
   call_id    uuid references calls(id) on delete set null,
   title      text not null,
-  kind       text not null default 'nota' check (kind in ('resumen','sop','estrategia','diagnostico','nota')),
+  kind       text not null default 'nota',
   body_md    text not null default '',
   visible_to_client boolean not null default true,
   notion_id  text unique,
@@ -114,6 +114,11 @@ create table if not exists documents (
 );
 
 -- ---------- Roadmap (hitos) ----------
+-- Tipos de documento (como constraint aparte para poder ampliarlos sin recrear la tabla)
+alter table documents drop constraint if exists documents_kind_check;
+alter table documents add constraint documents_kind_check
+  check (kind in ('resumen','reporte','objetivos','sop','estrategia','diagnostico','nota'));
+
 create table if not exists milestones (
   id         uuid primary key default gen_random_uuid(),
   org_id     uuid not null references organizations(id) on delete cascade,

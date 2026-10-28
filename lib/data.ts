@@ -4,6 +4,9 @@ import { redirect, notFound } from 'next/navigation';
 import { DEMO } from './env';
 import { supabaseServer } from './supabase/server';
 import * as demo from './demo';
+import { NOTION_MARKER, notionPageMarkdown } from './notion';
+import { supabaseAdmin } from './supabase/admin';
+import { SUPABASE_SERVICE } from './env';
 import type { ActionItem, Call, ClientSummary, Doc, FathomConnection, Milestone, Org, Resource, Viewer } from './types';
 
 /** Usuario actual. En modo demo es un usuario staff ficticio. */
@@ -175,7 +178,19 @@ export async function getDoc(orgId: string, id: string): Promise<Doc> {
   const sb = await supabaseServer();
   const { data } = await sb.from('documents').select('*').eq('org_id', orgId).eq('id', id).maybeSingle();
   if (!data) notFound();
-  return data as Doc;
+  const doc = data as Doc;
+  // Documento importado de Notion: se trae su contenido la primera vez y queda guardado.
+  if (doc.notion_id && doc.body_md.startsWith(NOTION_MARKER)) {
+    const md = await notionPageMarkdown(doc.notion_id);
+    const notionUrl = `https://www.notion.so/${doc.notion_id.replace(/-/g, '')}`;
+    if (md) {
+      if (SUPABASE_SERVICE) await supabaseAdmin().from('documents').update({ body_md: md, updated_at: new Date().toISOString() }).eq('id', doc.id);
+      return { ...doc, body_md: md };
+    }
+    const extra = doc.body_md.slice(NOTION_MARKER.length).trim();
+    return { ...doc, body_md: `${extra ? extra + '\n\n' : ''}Este documento está en Notion. [Abrir en Notion](${notionUrl})` };
+  }
+  return doc;
 }
 
 export async function getMilestones(orgId: string): Promise<Milestone[]> {

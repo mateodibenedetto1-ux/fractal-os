@@ -74,8 +74,9 @@ export interface Doc {
   org_id: string;
   call_id: string | null;
   title: string;
-  kind: 'resumen' | 'sop' | 'estrategia' | 'diagnostico' | 'nota';
+  kind: 'resumen' | 'reporte' | 'objetivos' | 'sop' | 'estrategia' | 'diagnostico' | 'nota';
   body_md: string;
+  notion_id?: string | null;
   visible_to_client: boolean;
   created_at: string;
   updated_at: string;
