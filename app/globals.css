@@ -157,6 +157,12 @@ a.list-row:hover { background: var(--raised); }
 .prose a { color: var(--brand); }
 .prose hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
 .prose > :first-child { margin-top: 0; }
+.prose table { width: 100%; border-collapse: collapse; margin: 0 0 1.4em; font-size: 14px; line-height: 1.5; display: block; overflow-x: auto; }
+.prose th, .prose td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line-soft); }
+.prose th { font-weight: 500; color: var(--ink); border-bottom-color: var(--line); white-space: nowrap; }
+.prose tr:hover td { background: color-mix(in srgb, var(--raised) 60%, transparent); }
+.prose strong { color: var(--ink); font-weight: 500; }
+.prose input[type=checkbox] { accent-color: var(--brand); margin-right: 6px; }
 
 /* ---------- Panel Fractal (layout con barra lateral) ---------- */
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }

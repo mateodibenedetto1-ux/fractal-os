@@ -183,11 +183,12 @@ export async function getDoc(orgId: string, id: string): Promise<Doc> {
   if (doc.notion_id && doc.body_md.startsWith(NOTION_MARKER)) {
     const md = await notionPageMarkdown(doc.notion_id);
     const notionUrl = `https://www.notion.so/${doc.notion_id.replace(/-/g, '')}`;
-    if (md) {
-      if (SUPABASE_SERVICE) await supabaseAdmin().from('documents').update({ body_md: md, updated_at: new Date().toISOString() }).eq('id', doc.id);
-      return { ...doc, body_md: md };
-    }
     const extra = doc.body_md.slice(NOTION_MARKER.length).trim();
+    if (md) {
+      const body = extra ? `${extra}\n\n${md}` : md;
+      if (SUPABASE_SERVICE) await supabaseAdmin().from('documents').update({ body_md: body, updated_at: new Date().toISOString() }).eq('id', doc.id);
+      return { ...doc, body_md: body };
+    }
     return { ...doc, body_md: `${extra ? extra + '\n\n' : ''}Este documento está en Notion. [Abrir en Notion](${notionUrl})` };
   }
   return doc;
