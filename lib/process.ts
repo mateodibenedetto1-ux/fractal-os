@@ -59,6 +59,23 @@ const TOOL: Anthropic.Tool = {
 export async function extract(input: { title: string; clientName?: string; transcript: string; fathomSummary?: string | null; fathomActions?: FathomMeeting['action_items'] }): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (key && input.transcript.trim()) {
+    try {
+      return await extractWithClaude(key, input);
+    } catch (e) {
+      // Clave vencida o inválida, sin saldo, etc.: seguimos con lo que mandó Fathom en vez de perder la llamada.
+      console.error('Claude no pudo procesar la llamada, uso los datos de Fathom:', e instanceof Error ? e.message : e);
+    }
+  }
+  // Fallback sin IA
+  return {
+    summary_md: input.fathomSummary || '_Sin resumen disponible._',
+    actions: (input.fathomActions ?? []).map((a) => ({ title: a.description, owner: 'cliente' as const })),
+    resources: linksIn(input.transcript).map((url) => ({ title: titleFromUrl(url), url })),
+  };
+}
+
+async function extractWithClaude(key: string, input: { title: string; clientName?: string; transcript: string }): Promise<Extraction> {
+  {
     const client = new Anthropic({ apiKey: key });
     const msg = await client.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
@@ -73,13 +90,8 @@ export async function extract(input: { title: string; clientName?: string; trans
     });
     const block = msg.content.find((b) => b.type === 'tool_use');
     if (block && block.type === 'tool_use') return block.input as Extraction;
+    throw new Error('Claude no devolvió el formato esperado');
   }
-  // Fallback sin IA
-  return {
-    summary_md: input.fathomSummary || '_Sin resumen disponible._',
-    actions: (input.fathomActions ?? []).map((a) => ({ title: a.description, owner: 'cliente' as const })),
-    resources: linksIn(input.transcript).map((url) => ({ title: titleFromUrl(url), url })),
-  };
 }
 
 export function kindFromUrl(url: string): ResourceKind {
