@@ -183,6 +183,8 @@ create policy client_read on organizations for select using (can_see_org(id));
 
 drop policy if exists self_read on profiles;
 create policy self_read on profiles for select using (id = auth.uid());
+drop policy if exists self_update on profiles;
+create policy self_update on profiles for all using (id = auth.uid()) with check (id = auth.uid());
 
 drop policy if exists self_read on memberships;
 create policy self_read on memberships for select using (user_id = auth.uid());
@@ -228,7 +230,10 @@ create or replace function handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   insert into profiles (id, email, full_name)
-  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email,'@',1)))
+  values (new.id, new.email, coalesce(
+    new.raw_user_meta_data->>'full_name',
+    initcap(regexp_replace(split_part(split_part(new.email, '@', 1), '.', 1), '[0-9_-]+', '', 'g'))
+  ))
   on conflict (id) do nothing;
   return new;
 end $$;

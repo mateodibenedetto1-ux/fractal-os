@@ -22,11 +22,17 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   return {
     id: auth.user.id,
     email: auth.user.email ?? '',
-    name: profile?.full_name || (auth.user.email ?? '').split('@')[0],
+    name: profile?.full_name || (auth.user.user_metadata?.full_name as string | undefined) || nameFromEmail(auth.user.email ?? ''),
     isStaff,
     clientOrgIds: list.filter((m) => m.organizations?.kind === 'client').map((m) => m.org_id),
   };
 });
+
+/** "mateo.dibenedetto1@gmail.com" → "Mateo" */
+function nameFromEmail(email: string) {
+  const first = email.split('@')[0].split(/[._-]/)[0].replace(/\d+/g, '');
+  return first ? first[0].toUpperCase() + first.slice(1) : email;
+}
 
 export async function requireViewer() {
   const v = await getViewer();

@@ -1,5 +1,5 @@
-import { getMembers } from '@/lib/data';
-import { inviteClientUser } from '@/lib/actions';
+import { getMembers, requireViewer } from '@/lib/data';
+import { inviteClientUser, updateMyName } from '@/lib/actions';
 import { DEMO } from '@/lib/env';
 import { supabaseServer } from '@/lib/supabase/server';
 
@@ -13,6 +13,7 @@ export default async function Settings() {
     agencyId = data?.id ?? '';
   }
   const team = agencyId ? await getMembers(agencyId) : [];
+  const me = await requireViewer();
   return (
     <>
       <div className="page-head">
@@ -21,6 +22,12 @@ export default async function Settings() {
           <p>El equipo de Fractal ve y edita todas las subcuentas.</p>
         </div>
       </div>
+      <form action={updateMyName} className="panel panel-pad row wrap" style={{ marginBottom: 20, gap: 14, alignItems: 'flex-end' }}>
+        <label className="field grow" style={{ minWidth: 220 }}>Tu nombre
+          <input className="input" name="full_name" defaultValue={me.name} required />
+        </label>
+        <button className="btn primary">Guardar nombre</button>
+      </form>
       <div className="two">
         <section>
           <h2 className="section-title">Equipo</h2>

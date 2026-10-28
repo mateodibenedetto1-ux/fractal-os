@@ -286,6 +286,16 @@ export async function inviteClientUser(form: FormData) {
   refresh();
 }
 
+export async function updateMyName(form: FormData) {
+  if (DEMO) return;
+  const v = await requireViewer();
+  const name = str(form, 'full_name');
+  if (!name) return;
+  const sb = await supabaseServer();
+  await sb.from('profiles').upsert({ id: v.id, email: v.email, full_name: name });
+  refresh();
+}
+
 // ---------- Integraciones ----------
 
 export async function createConnection(form: FormData) {
