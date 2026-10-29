@@ -195,6 +195,7 @@ export async function buildProps(dbId: string, values: Record<string, unknown>) 
   const out: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(values)) {
     if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value) && !value.length) continue;
     const key = Object.keys(schema).find((k) => k.trim().toLowerCase() === name.toLowerCase());
     if (!key) continue;
     const type = schema[key].type;
@@ -206,6 +207,7 @@ export async function buildProps(dbId: string, values: Record<string, unknown>) 
     else if (type === 'number') out[key] = { number: Number(value) };
     else if (type === 'url') out[key] = { url: String(value) };
     else if (type === 'checkbox') out[key] = { checkbox: Boolean(value) };
+    else if (type === 'people') out[key] = { people: (Array.isArray(value) ? value : [value]).filter(Boolean).map((id) => ({ object: 'user', id: String(id) })) };
   }
   return out;
 }

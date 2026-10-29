@@ -45,9 +45,18 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
                 {actions.filter((a) => !a.parent_id && !a.done).map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
               </select>
             </label>
-            <label className="field">Lo hace
-              <select className="select" name="owner" defaultValue="cliente"><option value="cliente">El cliente</option><option value="fractal">Fractal</option></select>
-            </label>
+            {org.responsables?.length ? (
+              <label className="field">Responsable
+                <select className="select" name="responsable" defaultValue="">
+                  <option value="">Sin asignar</option>
+                  {org.responsables.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </select>
+              </label>
+            ) : (
+              <label className="field">Lo hace
+                <select className="select" name="owner" defaultValue="cliente"><option value="cliente">El cliente</option><option value="fractal">Fractal</option></select>
+              </label>
+            )}
             <label className="field">Prioridad
               <select className="select" name="priority" defaultValue=""><option value="">Sin prioridad</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja</option></select>
             </label>
@@ -58,7 +67,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           <div><button className="btn primary">Agregar</button></div>
         </form>
       </details>
-      <ActionList items={actions} calls={calls} staff demo={DEMO} initialFilter="todos" />
+      <ActionList items={actions} calls={calls} staff demo={DEMO} initialFilter="todos" responsables={org.responsables ?? []} />
     </div>
   );
 }

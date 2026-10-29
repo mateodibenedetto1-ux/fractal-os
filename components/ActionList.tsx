@@ -1,9 +1,9 @@
 'use client';
 
 import { useOptimistic, useState, useTransition } from 'react';
-import { deleteAction, toggleAction } from '@/lib/actions';
+import { deleteAction, setActionResponsable, toggleAction } from '@/lib/actions';
 import { fmtDate, PRIORITY_LABEL } from '@/lib/format';
-import type { ActionItem, Call } from '@/lib/types';
+import type { ActionItem, Call, Responsable } from '@/lib/types';
 import { Icon } from './Icon';
 
 type CallRef = Pick<Call, 'id' | 'title' | 'held_at'>;
@@ -15,14 +15,16 @@ interface Props {
   demo?: boolean;
   /** Solo pendientes (portal) o todo */
   initialFilter?: 'pendientes' | 'todos';
+  responsables?: Responsable[];
 }
 
-export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes' }: Props) {
+export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes', responsables = [] }: Props) {
   const [local, setLocal] = useState(items);
   const [optimistic, setOptimistic] = useOptimistic(local, (state, p: { id: string; done: boolean }) =>
     state.map((a) => (a.id === p.id ? { ...a, done: p.done } : a)),
   );
   const [filter, setFilter] = useState(initialFilter);
+  const [who, setWho] = useState('Todos');
   const [, start] = useTransition();
 
   const toggle = (id: string, done: boolean) => {
@@ -30,6 +32,14 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
       setOptimistic({ id, done });
       if (!demo) await toggleAction(id, done);
       setLocal((s) => s.map((a) => (a.id === id ? { ...a, done } : a)));
+    });
+  };
+
+  const assign = (id: string, responsable: string | null) => {
+    const side = responsables.find((r) => r.name === responsable)?.side;
+    setLocal((s) => s.map((a) => (a.id === id ? { ...a, responsable, ...(side ? { owner: side } : {}) } : a)));
+    start(async () => {
+      if (!demo) await setActionResponsable(id, responsable);
     });
   };
 
@@ -44,7 +54,7 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
   const tops = optimistic.filter((a) => !a.parent_id);
   const subs = (id: string) => optimistic.filter((a) => a.parent_id === id);
   const done = tops.filter((a) => a.done).length;
-  const visible = tops.filter((a) => filter === 'todos' || !a.done || subs(a.id).some((s) => !s.done));
+  const visible = tops.filter((a) => (filter === 'todos' || !a.done || subs(a.id).some((s) => !s.done)) && (who === 'Todos' || (a.responsable ?? 'Sin asignar') === who));
 
   // Agrupar por llamada, de la más reciente a la más antigua
   const byCall = new Map<string, ActionItem[]>();
@@ -85,6 +95,13 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
             </button>
           ))}
         </div>
+        {responsables.length > 0 && (
+          <select className="select" value={who} onChange={(e) => setWho(e.target.value)} style={{ width: 180 }} aria-label="Filtrar por responsable">
+            <option>Todos</option>
+            {responsables.map((r) => <option key={r.name}>{r.name}</option>)}
+            <option>Sin asignar</option>
+          </select>
+        )}
       </div>
 
       <div className="panel">
@@ -99,7 +116,7 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
             <ul className="list">
               {g.items.map((a) => (
                 <li key={a.id}>
-                  <Row a={a} onToggle={toggle} onDelete={staff ? remove : undefined} />
+                  <Row a={a} onToggle={toggle} onDelete={staff ? remove : undefined} responsables={responsables} onAssign={staff ? assign : undefined} />
                   {subs(a.id).map((s) => (
                     <Row key={s.id} a={s} sub onToggle={toggle} onDelete={staff ? remove : undefined} />
                   ))}
@@ -113,7 +130,10 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
   );
 }
 
-function Row({ a, sub, onToggle, onDelete }: { a: ActionItem; sub?: boolean; onToggle: (id: string, d: boolean) => void; onDelete?: (id: string) => void }) {
+function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [] }: {
+  a: ActionItem; sub?: boolean; onToggle: (id: string, d: boolean) => void; onDelete?: (id: string) => void;
+  onAssign?: (id: string, r: string | null) => void; responsables?: Responsable[];
+}) {
   const id = `a-${a.id}`;
   return (
     <div className={`action ${sub ? 'sub' : ''} ${a.done ? 'is-done' : ''}`}>
@@ -123,9 +143,23 @@ function Row({ a, sub, onToggle, onDelete }: { a: ActionItem; sub?: boolean; onT
           {a.title}
         </label>
         {a.why && !sub && <p className="why">{a.why}</p>}
-        {!sub && (a.area || a.priority || a.owner === 'fractal' || a.due_date) && (
+        {!sub && (a.area || a.priority || a.owner === 'fractal' || a.due_date || a.responsable || onAssign) && (
           <div className="row wrap" style={{ gap: 6, marginTop: 7 }}>
-            {a.owner === 'fractal' && <span className="tag brand">Lo hace Fractal</span>}
+            {onAssign && responsables.length > 0 ? (
+              <select
+                className={`tag-select ${a.owner === 'fractal' ? 'brand' : ''}`}
+                value={a.responsable ?? ''}
+                onChange={(e) => onAssign(a.id, e.target.value || null)}
+                aria-label="Responsable"
+              >
+                <option value="">Sin responsable</option>
+                {responsables.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
+              </select>
+            ) : a.responsable ? (
+              <span className={`tag ${a.owner === 'fractal' ? 'brand' : ''}`}>{a.owner === 'fractal' && a.responsable === 'Fractal' ? 'Lo hace Fractal' : `A cargo de ${a.responsable}`}</span>
+            ) : (
+              a.owner === 'fractal' && <span className="tag brand">Lo hace Fractal</span>
+            )}
             {a.priority && <span className={`tag ${a.priority === 'critica' || a.priority === 'alta' ? 'warn' : ''}`}>{PRIORITY_LABEL[a.priority]}</span>}
             {a.area && <span className="tag">{a.area}</span>}
             {a.due_date && <span className="tag">Para el {fmtDate(a.due_date, { day: 'numeric', month: 'short' })}</span>}

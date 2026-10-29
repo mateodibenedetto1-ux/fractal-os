@@ -15,6 +15,7 @@ const P: Record<string, string> = {
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   page: 'M5 3h14v18H5z M9 8h6 M9 12h6 M9 16h3',
   arrow: 'M7 17 17 7 M8 7h9v9',
+  back: 'M19 12H5 M11 6l-6 6 6 6',
   book: 'M4 4h7a3 3 0 0 1 3 3v14a2 2 0 0 0-2-2H4z M20 4h-4a2 2 0 0 0-2 2',
   map: 'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15 M15 6v15',
   inbox: 'M3 13h5l1.5 3h5L16 13h5 M5 5h14l2 8v6H3v-6z',

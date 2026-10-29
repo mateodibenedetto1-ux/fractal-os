@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { syncAtlasFromNotion, syncOrgFromNotion } from '@/lib/sync';
+import { pushDirtyActions, syncAtlasFromNotion, syncOrgFromNotion } from '@/lib/sync';
 import type { Org } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -18,11 +18,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'no autorizado' }, { status: 401 });
   }
   const sb = supabaseAdmin();
+  const pushed = await pushDirtyActions(sb);
   const { data: orgs } = await sb.from('organizations').select('*').eq('kind', 'client').in('status', ['activo', 'onboarding']);
   const clients = [];
   for (const o of (orgs ?? []) as Org[]) {
     if (o.notion_tasks_db || o.notion_roadmap_db) clients.push(await syncOrgFromNotion(sb, o));
   }
   const atlas = await syncAtlasFromNotion(sb);
-  return NextResponse.json({ ok: true, clients, atlas });
+  return NextResponse.json({ ok: true, pushed, clients, atlas });
 }

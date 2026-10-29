@@ -8,7 +8,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { kindFromUrl, materializeCall } from './process';
 import { requireStaff, requireViewer } from './data';
 import { after } from 'next/server';
-import { pushActionStatus, pushNewAction, syncAtlasFromNotion, syncOrgFromNotion, } from './sync';
+import { pushActionToNotion, syncAtlasFromNotion, syncOrgFromNotion } from './sync';
 import { NOTION_DB, createRow, hasNotion, isNotionId, updateRow } from './notion';
 import type { Org } from './types';
 
@@ -30,10 +30,11 @@ export async function toggleAction(id: string, done: boolean) {
   if (DEMO) return;
   await requireViewer();
   const sb = await supabaseServer();
-  const { data, error } = await sb.from('action_items').update({ done }).eq('id', id).select('notion_id').single();
+  // El update corre con la sesión del usuario (RLS decide si puede); queda marcado para subir a Notion
+  const { error } = await sb.from('action_items').update({ done, notion_dirty: true }).eq('id', id);
   if (error) throw new Error(error.message);
-  // Se refleja también en la base de tareas del cliente en Notion
-  after(() => pushActionStatus(data?.notion_id ?? null, done));
+  // Se refleja en la base de tareas del cliente en Notion. Si falla, queda en cola y se reintenta.
+  await pushActionToNotion(supabaseAdmin(), id);
   refresh();
 }
 
@@ -109,16 +110,37 @@ export async function addAction(form: FormData) {
     why: str(form, 'why'),
     area: str(form, 'area'),
     priority: str(form, 'priority'),
-    owner: str(form, 'owner') ?? 'cliente',
+    owner: await ownerFor(sb, orgId, str(form, 'responsable'), str(form, 'owner')),
+    responsable: str(form, 'responsable'),
     due_date: str(form, 'due_date'),
     source: 'manual',
-  }).select('id, title, why, area, priority, due_date, parent_id').single();
+    notion_dirty: true,
+  }).select('id').single();
   if (error) throw new Error(error.message);
-  if (created && !created.parent_id) {
-    const { data: org } = await sb.from('organizations').select('notion_tasks_db').eq('id', orgId!).single();
-    const notionId = await pushNewAction(org?.notion_tasks_db, created);
-    if (notionId) await sb.from('action_items').update({ notion_id: notionId }).eq('id', created.id);
+  // Se crea también en la base de tareas del cliente en Notion (respaldo)
+  if (created) await pushActionToNotion(supabaseAdmin(), created.id);
+  refresh();
+}
+
+async function ownerFor(sb: Awaited<ReturnType<typeof supabaseServer>>, orgId: string | null, responsable: string | null, fallback: string | null) {
+  if (responsable && orgId) {
+    const { data } = await sb.from('organizations').select('responsables').eq('id', orgId).single();
+    const side = (data?.responsables as Org['responsables'])?.find((r) => r.name === responsable)?.side;
+    if (side) return side;
   }
+  return fallback === 'fractal' ? 'fractal' : 'cliente';
+}
+
+/** Cambia el responsable de un accionable y lo refleja en Notion. */
+export async function setActionResponsable(id: string, responsable: string | null) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = await supabaseServer();
+  const { data: a } = await sb.from('action_items').select('org_id').eq('id', id).single();
+  const owner = await ownerFor(sb, a?.org_id ?? null, responsable, null);
+  const { error } = await sb.from('action_items').update({ responsable, owner, notion_dirty: true }).eq('id', id);
+  if (error) throw new Error(error.message);
+  await pushActionToNotion(supabaseAdmin(), id);
   refresh();
 }
 
@@ -434,11 +456,12 @@ export async function closeOverdueActions(orgId: string, before: string) {
   if (DEMO) return;
   await requireStaff();
   const sb = await supabaseServer();
-  const { data } = await sb.from('action_items').update({ done: true })
+  const { data } = await sb.from('action_items').update({ done: true, notion_dirty: true })
     .eq('org_id', orgId).eq('done', false).is('parent_id', null).lt('due_date', before)
-    .select('notion_id');
+    .select('id');
   after(async () => {
-    for (const a of data ?? []) await pushActionStatus(a.notion_id, true);
+    const admin = supabaseAdmin();
+    for (const a of data ?? []) await pushActionToNotion(admin, a.id);
   });
   refresh();
 }

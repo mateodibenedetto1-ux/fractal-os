@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getOrgBySlug } from '@/lib/data';
 import { STATUS_LABEL } from '@/lib/format';
 import { NavLink } from '@/components/NavLink';
+import { Icon } from '@/components/Icon';
 
 export default async function ClientLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const org = await getOrgBySlug((await params).slug);
@@ -10,8 +11,8 @@ export default async function ClientLayout({ children, params }: { children: Rea
     <>
       <div className="page-head">
         <div>
-          <Link href="/panel/clientes" className="muted small" style={{ textDecoration: 'none' }}>Clientes</Link>
-          <h1 style={{ marginTop: 4 }}>{org.name}</h1>
+          <Link href="/panel/clientes" className="back-link"><Icon name="back" size={15} /> Todos los clientes</Link>
+          <h1 style={{ marginTop: 10 }}>{org.name}</h1>
           <p>
             {STATUS_LABEL[org.status]}
             {org.offer ? ` · ${org.offer}` : ''}

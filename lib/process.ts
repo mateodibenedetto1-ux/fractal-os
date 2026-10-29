@@ -3,10 +3,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { linksIn, transcriptToText, type FathomMeeting } from './fathom';
 import type { Org, ResourceKind } from './types';
+import { pushActionToNotion } from './sync';
 
 export interface Extraction {
   summary_md: string;
-  actions: { title: string; why?: string; area?: string; priority?: 'critica' | 'alta' | 'media' | 'baja'; owner?: 'cliente' | 'fractal'; subtasks?: string[] }[];
+  actions: { title: string; why?: string; area?: string; priority?: 'critica' | 'alta' | 'media' | 'baja'; owner?: 'cliente' | 'fractal'; responsable?: string; due_date?: string; subtasks?: string[] }[];
   resources: { title: string; url: string }[];
 }
 
@@ -20,6 +21,8 @@ Reglas:
 - actions: solo tareas concretas y verificables que surgieron de la llamada. Cada título empieza con verbo y tiene menos de 90 caracteres.
   "why" explica en una frase por qué importa (el motivo de negocio), como lo diría el consultor.
   owner = "fractal" si la tarea es del equipo de Fractal, "cliente" si la hace el cliente.
+  responsable: si te paso la lista de responsables posibles, elegí exactamente uno de esos nombres (la persona que se comprometió a hacerlo).
+  due_date: fecha límite en formato AAAA-MM-DD solo si en la llamada se acordó un día o plazo concreto; calculala a partir de la fecha de la llamada.
   area: una de Marketing, Contenido, Comercial, Operaciones, Adquisición, Producto, Branding, Métricas, General.
   subtasks: pasos concretos solo si la tarea los necesita.
 - resources: documentos, hojas, carpetas o videos que se compartieron o mencionaron con su URL. No inventes URLs: usá solo las que aparecen en el texto.`;
@@ -41,6 +44,8 @@ const TOOL: Anthropic.Tool = {
             area: { type: 'string' },
             priority: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'] },
             owner: { type: 'string', enum: ['cliente', 'fractal'] },
+            responsable: { type: 'string' },
+            due_date: { type: 'string', description: 'AAAA-MM-DD' },
             subtasks: { type: 'array', items: { type: 'string' } },
           },
           required: ['title'],
@@ -56,7 +61,7 @@ const TOOL: Anthropic.Tool = {
 };
 
 /** Usa Claude si hay API key; si no, cae a lo que manda Fathom. */
-export async function extract(input: { title: string; clientName?: string; transcript: string; fathomSummary?: string | null; fathomActions?: FathomMeeting['action_items'] }): Promise<Extraction> {
+export async function extract(input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string; fathomSummary?: string | null; fathomActions?: FathomMeeting['action_items'] }): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (key && input.transcript.trim()) {
     try {
@@ -74,7 +79,7 @@ export async function extract(input: { title: string; clientName?: string; trans
   };
 }
 
-async function extractWithClaude(key: string, input: { title: string; clientName?: string; transcript: string }): Promise<Extraction> {
+async function extractWithClaude(key: string, input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string }): Promise<Extraction> {
   {
     const client = new Anthropic({ apiKey: key });
     const msg = await client.messages.create({
@@ -85,7 +90,7 @@ async function extractWithClaude(key: string, input: { title: string; clientName
       tool_choice: { type: 'tool', name: TOOL.name },
       messages: [{
         role: 'user',
-        content: `Llamada: ${input.title}\nCliente: ${input.clientName ?? 'sin asignar'}\n\n<transcript>\n${input.transcript}\n</transcript>`,
+        content: `Llamada: ${input.title}\nCliente: ${input.clientName ?? 'sin asignar'}\nFecha de la llamada: ${input.heldAt?.slice(0, 10) ?? 'desconocida'}${input.responsables?.length ? `\nResponsables posibles: ${input.responsables.join(', ')}` : ''}\n\n<transcript>\n${input.transcript}\n</transcript>`,
       }],
     });
     const block = msg.content.find((b) => b.type === 'tool_use');
@@ -130,7 +135,8 @@ export function matchOrg(orgs: Pick<Org, 'id' | 'email_domains' | 'contact_email
 export async function materializeCall(sb: SupabaseClient, callId: string) {
   const { data: call } = await sb.from('calls').select('*').eq('id', callId).single();
   if (!call?.org_id) return { ok: false, reason: 'sin_cliente' as const };
-  const { data: org } = await sb.from('organizations').select('name').eq('id', call.org_id).single();
+  const { data: org } = await sb.from('organizations').select('name, responsables').eq('id', call.org_id).single();
+  const responsables = ((org?.responsables ?? []) as { name: string; side: 'cliente' | 'fractal' }[]);
 
   const raw = (call.raw ?? {}) as Partial<FathomMeeting>;
   const transcript = typeof call.transcript === 'string' ? call.transcript : transcriptToText({ transcript: call.transcript });
@@ -139,6 +145,8 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
     const ex = await extract({
       title: call.title,
       clientName: org?.name,
+      heldAt: call.held_at,
+      responsables: responsables.map((r) => r.name),
       transcript,
       fathomSummary: raw.default_summary?.markdown_formatted ?? call.summary_md,
       fathomActions: raw.action_items,
@@ -150,11 +158,16 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
 
     const source = process.env.ANTHROPIC_API_KEY ? 'ia' : 'fathom';
     let pos = 0;
+    const created: string[] = [];
     for (const a of ex.actions) {
+      const resp = responsables.find((r) => r.name.toLowerCase() === (a.responsable ?? '').toLowerCase());
+      const due = /^\d{4}-\d{2}-\d{2}$/.test(a.due_date ?? '') ? a.due_date : null;
       const { data: parent } = await sb.from('action_items').insert({
         org_id: call.org_id, call_id: callId, title: a.title, why: a.why ?? null, area: a.area ?? null,
-        priority: a.priority ?? null, owner: a.owner ?? 'cliente', position: pos++, source,
+        priority: a.priority ?? null, owner: resp?.side ?? a.owner ?? 'cliente', responsable: resp?.name ?? null,
+        due_date: due, position: pos++, source, notion_dirty: true,
       }).select('id').single();
+      if (parent) created.push(parent.id);
       if (parent && a.subtasks?.length) {
         await sb.from('action_items').insert(a.subtasks.map((t, i) => ({
           org_id: call.org_id, call_id: callId, parent_id: parent.id, title: t, owner: a.owner ?? 'cliente', position: i, source,
@@ -176,6 +189,9 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
         { onConflict: 'org_id,url', ignoreDuplicates: true },
       );
     }
+
+    // Respaldo en la base de tareas del cliente en Notion
+    for (const id of created) await pushActionToNotion(sb, id);
 
     await sb.from('calls').update({ status: 'procesada', summary_md: ex.summary_md, error: null }).eq('id', callId);
     return { ok: true as const, actions: ex.actions.length };

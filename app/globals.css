@@ -448,3 +448,12 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
   .lib-index nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
   .books { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+/* Volver a la lista de clientes */
+.back-link { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--ink-2); text-decoration: none; background: var(--raised); transition: border-color .15s, color .15s, transform .15s; }
+.back-link:hover { color: var(--ink); border-color: var(--muted); transform: translateX(-2px); }
+
+/* Responsable editable dentro de la fila */
+.tag-select { appearance: none; font: inherit; font-size: 12px; line-height: 1; padding: 4px 22px 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236d7774' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 7px center; color: var(--ink-2); cursor: pointer; transition: border-color .15s; }
+.tag-select:hover { border-color: var(--muted); }
+.tag-select.brand { background-color: var(--brand-soft); color: var(--brand); border-color: transparent; }

@@ -13,7 +13,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         <h1 style={{ fontSize: 38 }}>Próximos accionables</h1>
         <p>Lo que te quedó pendiente de tus llamadas, de la más reciente a la más antigua. Marcá lo que vayas completando y nosotros vemos tu avance.</p>
       </header>
-      <ActionList items={actions} calls={calls} demo={DEMO} />
+      <ActionList items={actions} calls={calls} demo={DEMO} responsables={org.responsables ?? []} />
     </>
   );
 }
