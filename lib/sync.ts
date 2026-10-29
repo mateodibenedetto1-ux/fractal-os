@@ -207,7 +207,7 @@ function responsableProps(name: string | null | undefined, list: Responsable[] =
  */
 export async function pushActionToNotion(sb: SupabaseClient, actionId: string): Promise<boolean> {
   const { data: a } = await sb.from('action_items')
-    .select('id, title, why, area, priority, due_date, done, responsable, notion_id, parent_id, org_id, organizations(notion_tasks_db, responsables)')
+    .select('id, title, why, area, priority, due_date, done, responsable, notion_id, parent_id, org_id, organizations!action_items_org_id_fkey(notion_tasks_db, responsables)')
     .eq('id', actionId).single();
   if (!a) return false;
   const org = (a as any).organizations as { notion_tasks_db: string | null; responsables: Responsable[] } | null;
