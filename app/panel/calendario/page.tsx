@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getCalls, getMilestones, listClients } from '@/lib/data';
 import { getContentCalendar, keyDatesFor, type ContentItem, type KeyDate } from '@/lib/calendar';
 import { CalendarView } from '@/components/CalendarView';
@@ -20,6 +21,7 @@ export default async function GlobalCalendar() {
           <h1>Calendario</h1>
           <p>El contenido de todos los clientes, las fechas clave de cada roadmap y las llamadas.</p>
         </div>
+        <Link href="/panel/objetivos?v=semana" className="btn">Plan semanal del equipo</Link>
       </div>
       {errors > 0 && <p className="small" style={{ color: 'var(--warn)', marginBottom: 12 }}>No se pudieron leer {errors} calendarios de Notion.</p>}
       <CalendarView items={items} keyDates={keys} showClient />

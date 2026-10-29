@@ -11,6 +11,11 @@ export interface Goal {
   meta: number | null;
   unidad: string | null;
   criterio: string | null;
+  horizonte: 'Q4' | 'Mes' | 'Semana';
+  marca: string | null;
+  desde: string | null;
+  hasta: string | null;
+  notas: string | null;
 }
 
 export interface Reward {
@@ -28,6 +33,11 @@ const load = unstable_cache(
     const goals: Goal[] = g.map((p) => ({
       id: plainId(p.id), title: pageTitle(p), area: val(prop(p, 'Área', 'Area')) ?? 'Otros', estado: val(prop(p, 'Estado')) ?? 'Por definir',
       actual: val(prop(p, 'Actual')), meta: val(prop(p, 'Meta')), unidad: val(prop(p, 'Unidad')), criterio: val(prop(p, 'Criterio de logro')),
+      horizonte: (val(prop(p, 'Horizonte')) ?? 'Q4') as Goal['horizonte'],
+      marca: val(prop(p, 'Marca')),
+      desde: prop(p, 'Período')?.date?.start?.slice(0, 10) ?? null,
+      hasta: (prop(p, 'Período')?.date?.end ?? prop(p, 'Período')?.date?.start)?.slice(0, 10) ?? null,
+      notas: val(prop(p, 'Notas')),
     }));
     const rewards: Reward[] = r.map((p) => ({
       id: plainId(p.id), title: pageTitle(p), estado: val(prop(p, 'Estado')) ?? 'Por asignar', hito: val(prop(p, 'Hito vinculado')),

@@ -443,6 +443,16 @@ export async function updateGoalActual(form: FormData) {
   revalidatePath('/panel/objetivos');
 }
 
+/** Cambia el estado de un objetivo (por ejemplo, marcar un objetivo semanal como logrado). */
+export async function setGoalEstado(id: string, estado: string) {
+  if (DEMO) return;
+  await requireStaff();
+  if (!isNotionId(id)) return;
+  await updateRow(id, { Estado: estado });
+  revalidateTag('goals');
+  revalidatePath('/panel/objetivos');
+}
+
 export async function setRewardEstado(id: string, estado: string) {
   if (DEMO) return;
   await requireStaff();

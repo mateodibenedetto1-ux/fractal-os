@@ -1,18 +1,186 @@
+import Link from 'next/link';
 import { getGoals, type Goal, type Reward } from '@/lib/goals';
 import { setRewardEstado, updateGoalActual } from '@/lib/actions';
+import { getAllMilestones, listClients } from '@/lib/data';
+import { addDays, getPlanTasks, iso, mondayOf, todayISO } from '@/lib/plan';
+import { BRANDS, brandColor } from '@/lib/brands';
+import { WeekPlanner } from '@/components/WeekPlanner';
 
 export const metadata = { title: 'Objetivos' };
 
 const AREAS = ['Clientes', 'Marca conjunta', 'Baseline', 'Estructura'];
+const BRAND_ORDER = (m: string | null) => { const i = BRANDS.findIndex((b) => b.k === m); return i < 0 ? 99 : i; };
 const fmtN = (n: number | null, unidad: string | null) => {
   if (n === null || n === undefined) return '—';
   if (unidad?.startsWith('USD')) return `USD ${n.toLocaleString('es-AR')}`;
   return n.toLocaleString('es-AR');
 };
 const k = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n));
+const range = (a: string, b: string) => {
+  const f = (s: string, o: Intl.DateTimeFormatOptions) => new Date(s + 'T12:00:00').toLocaleDateString('es-AR', o);
+  return a.slice(0, 7) === b.slice(0, 7) ? `${f(a, { day: 'numeric' })} al ${f(b, { day: 'numeric', month: 'long' })}` : `${f(a, { day: 'numeric', month: 'short' })} al ${f(b, { day: 'numeric', month: 'short' })}`;
+};
+const monthLabel = (ym: string) => { const s = new Date(ym + '-15T12:00:00').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }); return s[0].toUpperCase() + s.slice(1); };
+const overlaps = (g: Goal, a: string, b: string) => !!g.desde && !!g.hasta && g.desde <= b && g.hasta >= a;
 
-export default async function Objetivos() {
-  const { goals, rewards, live } = await getGoals();
+type SP = { v?: string; semana?: string; mes?: string };
+
+export default async function Objetivos({ searchParams }: { searchParams: Promise<SP> }) {
+  const sp = await searchParams;
+  const v = sp.v ?? 'semana';
+  const tabs = [
+    { k: 'semana', l: 'Semana' },
+    { k: 'mes', l: 'Mes' },
+    { k: 'q4', l: 'Q4' },
+  ];
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Objetivos</h1>
+          <p>Primero nuestras marcas: Fractal Consulting, Baseline Creative y el contenido de Mateo y Lorena. Después, Val y Marcela.</p>
+        </div>
+      </div>
+      <nav className="tabs">
+        {tabs.map((t) => <Link key={t.k} href={`/panel/objetivos?v=${t.k}`} aria-current={v === t.k ? 'page' : undefined}>{t.l}</Link>)}
+      </nav>
+      {v === 'q4' ? <Q4View /> : v === 'mes' ? <MonthView mes={sp.mes} /> : <WeekView semana={sp.semana} />}
+    </>
+  );
+}
+
+async function WeekView({ semana }: { semana?: string }) {
+  const today = todayISO();
+  const from = mondayOf(semana && /^\d{4}-\d{2}-\d{2}$/.test(semana) ? semana : today);
+  const to = addDays(from, 6);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+  const [{ goals, live }, plan] = await Promise.all([getGoals(), getPlanTasks(from, to)]);
+  const weekGoals = goals.filter((g) => g.horizonte === 'Semana' && overlaps(g, from, to)).sort((a, b) => BRAND_ORDER(a.marca) - BRAND_ORDER(b.marca));
+  const counters = goals.filter((g) => g.horizonte !== 'Q4' && g.meta && g.unidad !== 'Hito' && overlaps(g, from, to) && g.estado !== 'Pausado');
+  const isCurrent = today >= from && today <= to;
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="row between wrap" style={{ gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 300, letterSpacing: '-.02em' }}>Semana del {range(from, to)}</div>
+          {!live && <p className="muted small">Sin conexión con Fractal Goals: se muestran solo las tareas.</p>}
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <Link className="btn sm" href={`/panel/objetivos?v=semana&semana=${addDays(from, -7)}`} aria-label="Semana anterior">‹</Link>
+          {!isCurrent && <Link className="btn sm" href="/panel/objetivos?v=semana">Esta semana</Link>}
+          <Link className="btn sm" href={`/panel/objetivos?v=semana&semana=${addDays(from, 7)}`} aria-label="Semana siguiente">›</Link>
+        </div>
+      </div>
+      <WeekPlanner
+        days={days}
+        today={today}
+        tasks={plan.tasks}
+        overdue={from <= today ? plan.overdue : []}
+        undated={isCurrent ? plan.undated : []}
+        goals={weekGoals}
+        counters={counters}
+      />
+    </div>
+  );
+}
+
+async function MonthView({ mes }: { mes?: string }) {
+  const today = todayISO();
+  const nextWeekEnd = addDays(mondayOf(today), 6);
+  const ym = mes && /^\d{4}-\d{2}$/.test(mes) ? mes : nextWeekEnd.slice(0, 7);
+  const first = `${ym}-01`;
+  const lastD = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0);
+  const last = iso(lastD);
+  const weeks: string[] = [];
+  for (let w = mondayOf(first); w <= last; w = addDays(w, 7)) weeks.push(w);
+  const [{ goals }, plan, milestones, clients] = await Promise.all([
+    getGoals(), getPlanTasks(weeks[0], addDays(weeks[weeks.length - 1], 6)), getAllMilestones(), listClients(),
+  ]);
+  const orgName = new Map(clients.map((c) => [c.id, c.name]));
+  const monthGoals = goals.filter((g) => g.horizonte === 'Mes' && overlaps(g, first, last)).sort((a, b) => BRAND_ORDER(a.marca) - BRAND_ORDER(b.marca));
+  const prev = iso(new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 2, 1)).slice(0, 7);
+  const next = iso(new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 1)).slice(0, 7);
+  return (
+    <div className="stack" style={{ gap: 26 }}>
+      <div className="row between wrap" style={{ gap: 10 }}>
+        <div style={{ fontSize: 22, fontWeight: 300, letterSpacing: '-.02em' }}>{monthLabel(ym)}</div>
+        <div className="row" style={{ gap: 6 }}>
+          <Link className="btn sm" href={`/panel/objetivos?v=mes&mes=${prev}`} aria-label="Mes anterior">‹</Link>
+          <Link className="btn sm" href={`/panel/objetivos?v=mes&mes=${next}`} aria-label="Mes siguiente">›</Link>
+        </div>
+      </div>
+
+      <section>
+        <h2 className="section-title">Objetivos del mes</h2>
+        {monthGoals.length ? (
+          <div className="wk-goals">
+            {monthGoals.map((g) => {
+              const numeric = g.meta && g.unidad !== 'Hito';
+              const pct = numeric ? Math.min(100, ((g.actual ?? 0) / g.meta!) * 100) : 0;
+              return (
+                <div key={g.id ?? g.title} className={`wk-goal ${g.estado === 'Logrado' ? 'is-done' : ''}`} style={{ ['--c' as string]: brandColor(g.marca) }}>
+                  <span className="wk-brand">{g.marca}</span>
+                  <span className="wk-goal-title">{g.title}</span>
+                  {g.criterio && <p className="muted small wk-crit">{g.criterio}</p>}
+                  {numeric ? (
+                    <>
+                      <div className="wk-num"><b>{(g.actual ?? 0).toLocaleString('es-AR')}</b><span className="muted"> / {g.meta!.toLocaleString('es-AR')} {g.unidad?.toLowerCase()}</span></div>
+                      <div className="bar"><span style={{ width: `${pct}%`, background: 'var(--c)' }} /></div>
+                    </>
+                  ) : (
+                    <span className={`tag ${g.estado === 'Logrado' ? 'ok' : g.estado === 'En curso' ? 'brand' : ''}`} style={{ marginTop: 'auto', width: 'fit-content' }}>{g.estado}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : <div className="panel empty">Todavía no hay objetivos para este mes en Fractal Goals.</div>}
+      </section>
+
+      <section>
+        <h2 className="section-title">Semana por semana</h2>
+        <div className="stack" style={{ gap: 10 }}>
+          {weeks.map((w) => {
+            const end = addDays(w, 6);
+            const wg = goals.filter((g) => g.horizonte === 'Semana' && overlaps(g, w, end)).sort((a, b) => BRAND_ORDER(a.marca) - BRAND_ORDER(b.marca));
+            const hitos = milestones.filter((m) => m.due_date && m.due_date >= w && m.due_date <= end);
+            const tk = plan.tasks.filter((t) => t.due_date && t.due_date >= w && t.due_date <= end);
+            const ok = tk.filter((t) => t.done).length;
+            const current = today >= w && today <= end;
+            return (
+              <Link key={w} href={`/panel/objetivos?v=semana&semana=${w}`} className={`panel mo-week ${current ? 'now' : ''}`}>
+                <div className="mo-when">
+                  <b>{range(w, end)}</b>
+                  {current && <span className="tag brand">Esta semana</span>}
+                  <span className="muted small" style={{ fontVariantNumeric: 'tabular-nums' }}>{tk.length ? `${ok}/${tk.length} tareas` : 'sin tareas'}</span>
+                  {tk.length > 0 && <div className="bar" style={{ width: 90 }}><span style={{ width: `${(ok / tk.length) * 100}%` }} /></div>}
+                </div>
+                <ul className="mo-goals">
+                  {wg.map((g) => (
+                    <li key={g.id ?? g.title} className={g.estado === 'Logrado' ? 'is-done' : ''}>
+                      <i style={{ background: brandColor(g.marca) }} />{g.title}
+                    </li>
+                  ))}
+                  {hitos.map((m) => (
+                    <li key={m.id} className="mo-hito">
+                      <span>◆</span>{m.title}<em>{orgName.get(m.org_id) ?? ''} · {new Date(m.due_date + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</em>
+                    </li>
+                  ))}
+                  {!wg.length && !hitos.length && <li className="muted">Sin objetivos cargados para esta semana.</li>}
+                </ul>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+async function Q4View() {
+  const { goals: all, rewards, live } = await getGoals();
+  const goals = all.filter((g) => g.horizonte === 'Q4');
+  const brandGoals = goals.filter((g) => g.marca && g.marca !== 'Fractal' && g.estado !== 'Pausado');
   const active = goals.filter((g) => g.estado !== 'Pausado');
   const done = active.filter((g) => g.estado === 'Logrado').length;
   const unlocked = rewards.filter((r) => r.estado === 'Desbloqueada' || r.estado === 'Adquirida').length;
@@ -31,7 +199,6 @@ export default async function Objetivos() {
   if (!live) {
     return (
       <>
-        <div className="page-head"><div><h1>Objetivos · Q4 2026</h1><p>Octubre a diciembre. Cada meta se marca como lograda solo con evidencia.</p></div></div>
         <div className="panel panel-pad stack" style={{ gap: 8, maxWidth: 620 }}>
           <b style={{ fontWeight: 500 }}>Falta darle acceso a Fractal Goals</b>
           <p className="muted small">En Notion, abrí la página <b>Fractal</b> → ••• → Conexiones → agregá <b>Fractal OS</b>. Con eso se ven acá el Scoreboard y el Rewards Tracker de Q4, y se pueden actualizar.</p>
@@ -42,16 +209,26 @@ export default async function Objetivos() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>Objetivos · Q4 2026</h1>
-          <p>Octubre a diciembre. Cada meta se marca como lograda solo con evidencia.</p>
-        </div>
-        <div className="row" style={{ gap: 24 }}>
+      <div className="row" style={{ gap: 24, justifyContent: 'flex-end', marginBottom: 18 }}>
           <Counter n={done} of={active.length} label="metas logradas" />
           <Counter n={unlocked} of={rewards.length} label="recompensas desbloqueadas" />
-        </div>
       </div>
+
+      {brandGoals.length > 0 && (
+        <section style={{ marginBottom: 28 }}>
+          <h2 className="section-title">Foco del trimestre · marcas</h2>
+          <div className="wk-goals">
+            {[...brandGoals].sort((a, b) => BRAND_ORDER(a.marca) - BRAND_ORDER(b.marca)).map((g) => (
+              <div key={g.id ?? g.title} className={`wk-goal ${g.estado === 'Logrado' ? 'is-done' : ''}`} style={{ ['--c' as string]: brandColor(g.marca) }}>
+                <span className="wk-brand">{g.marca}</span>
+                <span className="wk-goal-title">{g.title}</span>
+                {g.criterio && <p className="muted small wk-crit">{g.criterio}</p>}
+                <span className={`tag ${g.estado === 'Logrado' ? 'ok' : g.estado === 'En curso' ? 'brand' : ''}`} style={{ marginTop: 'auto', width: 'fit-content' }}>{g.estado}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {ladder.length > 0 && (
         <section className="panel panel-pad" style={{ marginBottom: 28 }}>
@@ -83,7 +260,7 @@ export default async function Objetivos() {
       <div className="two">
         <section className="stack" style={{ gap: 22 }}>
           {AREAS.map((area) => {
-            const list = goals.filter((g) => g.area === area);
+            const list = goals.filter((g) => g.area === area && !brandGoals.includes(g));
             if (!list.length) return null;
             return (
               <div key={area}>

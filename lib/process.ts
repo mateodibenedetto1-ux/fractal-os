@@ -71,10 +71,11 @@ export async function extract(input: { title: string; clientName?: string; heldA
       console.error('Claude no pudo procesar la llamada, uso los datos de Fathom:', e instanceof Error ? e.message : e);
     }
   }
-  // Fallback sin IA
+  // Fallback sin IA: los action items de Fathom o, si no vienen, los "Próximos pasos" del resumen
+  const fromFathom = (input.fathomActions ?? []).map((a) => ({ title: a.description, owner: 'cliente' as const }));
   return {
     summary_md: input.fathomSummary || '_Sin resumen disponible._',
-    actions: (input.fathomActions ?? []).map((a) => ({ title: a.description, owner: 'cliente' as const })),
+    actions: fromFathom.length ? fromFathom : nextStepsFromSummary(input.fathomSummary ?? ''),
     resources: linksIn(input.transcript).map((url) => ({ title: titleFromUrl(url), url })),
   };
 }
@@ -97,6 +98,26 @@ async function extractWithClaude(key: string, input: { title: string; clientName
     if (block && block.type === 'tool_use') return block.input as Extraction;
     throw new Error('Claude no devolvió el formato esperado');
   }
+}
+
+/** Lee la sección "Próximos pasos" del resumen de Fathom: viñetas por persona con sus tareas. */
+export function nextStepsFromSummary(md: string): Extraction['actions'] {
+  const clean = (t: string) => t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*/g, '').trim();
+  const lines = md.split('\n');
+  const start = lines.findIndex((l) => /^#+\s*(próximos pasos|next steps|action items)/i.test(l.trim()));
+  if (start < 0) return [];
+  const out: Extraction['actions'] = [];
+  let who: string | undefined;
+  for (const raw of lines.slice(start + 1)) {
+    if (/^#+\s/.test(raw.trim())) break;
+    const m = raw.match(/^(\s*)[-*]\s+(.*)$/);
+    if (!m) continue;
+    const text = clean(m[2]);
+    if (!text) continue;
+    if (m[1].length <= 2 && /:$/.test(text)) { who = text.replace(/:$/, '').trim(); continue; }
+    out.push({ title: text.replace(/\.$/, '').slice(0, 140), responsable: who });
+  }
+  return out;
 }
 
 export function kindFromUrl(url: string): ResourceKind {
@@ -136,7 +157,12 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
   const { data: call } = await sb.from('calls').select('*').eq('id', callId).single();
   if (!call?.org_id) return { ok: false, reason: 'sin_cliente' as const };
   const { data: org } = await sb.from('organizations').select('name, responsables').eq('id', call.org_id).single();
-  const responsables = ((org?.responsables ?? []) as { name: string; side: 'cliente' | 'fractal' }[]);
+  const responsables = ((org?.responsables ?? []) as { name: string; side: 'cliente' | 'fractal'; aliases?: string[] }[]);
+  const findResp = (name?: string) => {
+    if (!name) return undefined;
+    const n = name.toLowerCase();
+    return responsables.find((r) => [r.name, ...(r.aliases ?? [])].some((x) => x.toLowerCase() === n || n.startsWith(x.toLowerCase() + ' ')));
+  };
 
   const raw = (call.raw ?? {}) as Partial<FathomMeeting>;
   const transcript = typeof call.transcript === 'string' ? call.transcript : transcriptToText({ transcript: call.transcript });
@@ -160,7 +186,7 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
     let pos = 0;
     const created: string[] = [];
     for (const a of ex.actions) {
-      const resp = responsables.find((r) => r.name.toLowerCase() === (a.responsable ?? '').toLowerCase());
+      const resp = findResp(a.responsable);
       const due = /^\d{4}-\d{2}-\d{2}$/.test(a.due_date ?? '') ? a.due_date : null;
       const { data: parent } = await sb.from('action_items').insert({
         org_id: call.org_id, call_id: callId, title: a.title, why: a.why ?? null, area: a.area ?? null,
