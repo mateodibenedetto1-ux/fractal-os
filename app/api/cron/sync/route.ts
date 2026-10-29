@@ -19,7 +19,9 @@ export async function GET(req: Request) {
   }
   const sb = supabaseAdmin();
   const pushed = await pushDirtyActions(sb);
-  const { data: orgs } = await sb.from('organizations').select('*').eq('kind', 'client').in('status', ['activo', 'onboarding']);
+  const { data: clientOrgs } = await sb.from('organizations').select('*').eq('kind', 'client').in('status', ['activo', 'onboarding']);
+  const { data: agency } = await sb.from('organizations').select('*').eq('kind', 'agency');
+  const orgs = [...(agency ?? []), ...(clientOrgs ?? [])];
   const clients = [];
   for (const o of (orgs ?? []) as Org[]) {
     if (o.notion_tasks_db || o.notion_roadmap_db) clients.push(await syncOrgFromNotion(sb, o));

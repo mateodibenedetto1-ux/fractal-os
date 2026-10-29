@@ -16,9 +16,13 @@ interface Props {
   /** Solo pendientes (portal) o todo */
   initialFilter?: 'pendientes' | 'todos';
   responsables?: Responsable[];
+  /** Nombre del cliente por id (tracker interno de Fractal) */
+  clientNames?: Record<string, string>;
+  progressLabel?: string;
+  flatLabel?: string;
 }
 
-export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes', responsables = [] }: Props) {
+export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes', responsables = [], clientNames, progressLabel, flatLabel }: Props) {
   const [local, setLocal] = useState(items);
   const [optimistic, setOptimistic] = useOptimistic(local, (state, p: { id: string; done: boolean }) =>
     state.map((a) => (a.id === p.id ? { ...a, done: p.done } : a)),
@@ -70,14 +74,14 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
       staffLabel: `${c.title} · ${fmtDate(c.held_at)}`,
       items: byCall.get(c.id)!,
     })),
-    ...(byCall.has('none') ? [{ key: 'none', label: 'Otros accionables', staffLabel: 'Sin llamada asociada', items: byCall.get('none')! }] : []),
+    ...(byCall.has('none') ? [{ key: 'none', label: flatLabel ?? 'Otros accionables', staffLabel: flatLabel ?? 'Sin llamada asociada', items: byCall.get('none')! }] : []),
   ];
 
   return (
     <div className="stack" style={{ gap: 14 }}>
       <div className="panel panel-pad">
         <div className="row between" style={{ marginBottom: 12 }}>
-          <span className="muted small">Tu avance en todas las llamadas</span>
+          <span className="muted small">{progressLabel ?? 'Tu avance en todas las llamadas'}</span>
           <span className="serif" style={{ fontSize: 26 }}>
             {done} de {tops.length}
           </span>
@@ -116,7 +120,7 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
             <ul className="list">
               {g.items.map((a) => (
                 <li key={a.id}>
-                  <Row a={a} onToggle={toggle} onDelete={staff ? remove : undefined} responsables={responsables} onAssign={staff ? assign : undefined} />
+                  <Row a={a} onToggle={toggle} onDelete={staff ? remove : undefined} responsables={responsables} onAssign={staff ? assign : undefined} client={a.client_org_id ? clientNames?.[a.client_org_id] : undefined} />
                   {subs(a.id).map((s) => (
                     <Row key={s.id} a={s} sub onToggle={toggle} onDelete={staff ? remove : undefined} />
                   ))}
@@ -130,9 +134,9 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
   );
 }
 
-function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [] }: {
+function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [], client }: {
   a: ActionItem; sub?: boolean; onToggle: (id: string, d: boolean) => void; onDelete?: (id: string) => void;
-  onAssign?: (id: string, r: string | null) => void; responsables?: Responsable[];
+  onAssign?: (id: string, r: string | null) => void; responsables?: Responsable[]; client?: string;
 }) {
   const id = `a-${a.id}`;
   return (
@@ -145,6 +149,7 @@ function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [] }: {
         {a.why && !sub && <p className="why">{a.why}</p>}
         {!sub && (a.area || a.priority || a.owner === 'fractal' || a.due_date || a.responsable || onAssign) && (
           <div className="row wrap" style={{ gap: 6, marginTop: 7 }}>
+            {client && <span className="tag">{client}</span>}
             {onAssign && responsables.length > 0 ? (
               <select
                 className={`tag-select ${a.owner === 'fractal' ? 'brand' : ''}`}

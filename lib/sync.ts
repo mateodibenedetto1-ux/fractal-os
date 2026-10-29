@@ -3,7 +3,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { NOTION_DB, createRow, hasNotion, isNotionId, pageTitle, plainId, prop, queryDatabase, updateRow, val } from './notion';
 import type { Org, Responsable } from './types';
 
-const PRIORITY_IN: Record<string, string> = { crítica: 'critica', critica: 'critica', alta: 'alta', media: 'media', baja: 'baja' };
+const PRIORITY_IN: Record<string, string> = { crítica: 'critica', critica: 'critica', alta: 'alta', media: 'media', baja: 'baja', p1: 'alta', p2: 'media', p3: 'baja' };
+/** Tracker de Fractal usa P1/P2/P3 */
+const PRIORITY_P: Record<string, string> = { critica: 'P1', alta: 'P1', media: 'P2', baja: 'P3' };
 export const PRIORITY_OUT: Record<string, string> = { critica: 'Crítica', alta: 'Alta', media: 'Media', baja: 'Baja' };
 const isDone = (s: unknown) => typeof s === 'string' && /done|ready|listo|complet|hecho/i.test(s);
 
@@ -31,8 +33,19 @@ export function responsableFromRow(r: any, list: Responsable[] = []): string | n
   const t = norm(title);
   const byTitle = list.find((x) => t.startsWith(norm(x.name)) && /^[\s:—–\-/,]/.test(t.slice(norm(x.name).length)));
   if (byTitle) return byTitle.name;
-  const ids = peopleIds(prop(r, 'Responsable'));
-  const matches = list.filter((x) => [x.notion_user, ...(x.notion_alt ?? [])].some((u) => u && ids.includes(u.replace(/-/g, ''))));
+  const ids = [...peopleIds(prop(r, 'Responsable')), ...peopleIds(prop(r, 'Owner'))];
+  let matches = list.filter((x) => !x.name.includes(' + ') && [x.notion_user, ...(x.notion_alt ?? [])].some((u) => u && ids.includes(u.replace(/-/g, ''))));
+  // Columna de texto "Responsible" (tracker de Fractal): busca los nombres que aparezcan
+  const text = val(prop(r, 'Responsible'));
+  if (text) {
+    const tn = norm(String(text));
+    const named = list.filter((x) => !x.name.includes(' + ') && [x.name, ...(x.aliases ?? [])].some((n) => new RegExp(`\\b${norm(n)}\\b`).test(tn)));
+    if (named.length) matches = named;
+  }
+  if (matches.length > 1) {
+    const combo = list.find((x) => x.name.includes(' + ') && x.name.split(' + ').every((n) => matches.some((m) => m.name === n)) && x.name.split(' + ').length === matches.length);
+    if (combo) return combo.name;
+  }
   // Si hay persona del cliente y de Fractal a la vez, gana la del cliente
   return (matches.find((x) => x.side === 'cliente') ?? matches[0])?.name ?? null;
 }
@@ -88,6 +101,10 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
       const byNotion = new Map((existing ?? []).map((a) => [plainId(a.notion_id!), a]));
       const { count } = await sb.from('action_items').select('id', { count: 'exact', head: true }).eq('org_id', org.id);
       let pos = count ?? 0;
+      const { data: clientOrgs } = org.kind === 'agency'
+        ? await sb.from('organizations').select('id, notion_client_page').not('notion_client_page', 'is', null)
+        : { data: [] as { id: string; notion_client_page: string }[] };
+      const clientByPage = new Map((clientOrgs ?? []).map((o) => [plainId(o.notion_client_page!), o.id]));
 
       for (const r of rows) {
         const id = plainId(r.id);
@@ -100,10 +117,14 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
           done,
           priority: PRIORITY_IN[String(val(prop(r, 'Prioridad', 'Priority')) ?? '').toLowerCase()] ?? null,
           area: val(prop(r, 'Area', 'Área')),
-          due_date: val(prop(r, 'Fecha Limite', 'Fecha límite', 'Due'))?.slice(0, 10) ?? null,
+          due_date: val(prop(r, 'Fecha Limite', 'Fecha límite', 'Due Date', 'Due'))?.slice(0, 10) ?? null,
           responsable: responsableFromRow(r, org.responsables),
         };
-        const side = org.responsables?.find((x) => x.name === fields.responsable)?.side;
+        const side = org.kind === 'agency' ? 'fractal' : org.responsables?.find((x) => x.name === fields.responsable)?.side;
+        // Tracker de Fractal: la relación "Client" apunta a la ficha del cliente en Notion
+        const clientRel: string[] = org.kind === 'agency' ? val(prop(r, 'Client')) ?? [] : [];
+        const clientOrg = clientRel.map((x) => clientByPage.get(x)).find(Boolean) ?? null;
+        const extra = org.kind === 'agency' ? { client_org_id: clientOrg } : {};
         const cur = byNotion.get(id);
         if (cur?.notion_dirty) {
           res.tasks++;
@@ -111,6 +132,7 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
         }
         if (cur) {
           await sb.from('action_items').update({
+            ...extra,
             ...(side ? { owner: side } : {}),
             ...fields,
             ...(callId ? { call_id: callId } : {}),
@@ -121,7 +143,8 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
             ...fields,
             org_id: org.id,
             call_id: callId,
-            why: whyFromNotes(val(prop(r, 'Notes & Links', 'Notas'))),
+            ...extra,
+            why: whyFromNotes(val(prop(r, 'Notes & Links', 'Notas', 'Deliverable', 'Notes'))),
             owner: side ?? ownerFromTitle(title),
             done_at: done ? new Date().toISOString() : null,
             position: pos++,
@@ -172,8 +195,10 @@ export async function syncAtlasFromNotion(sb: SupabaseClient): Promise<{ count: 
 /** Valores de Notion para el responsable: columna "A cargo" + persona, cuando la tiene. */
 function responsableProps(name: string | null | undefined, list: Responsable[] = []) {
   if (!name) return {};
-  const r = list.find((x) => x.name === name);
-  return { 'A cargo': name, Responsable: r?.notion_user ? [r.notion_user] : undefined };
+  // "Mateo + Lorena" → las dos personas
+  const people = name.split(' + ').map((n) => list.find((x) => x.name === n)).filter(Boolean) as Responsable[];
+  const ids = (people.length ? people : list.filter((x) => x.name === name)).map((x) => x.notion_user).filter(Boolean) as string[];
+  return { 'A cargo': name, Responsable: ids.length ? ids : undefined, Owner: ids.length ? ids : undefined, Responsible: name };
 }
 
 /**
@@ -193,15 +218,18 @@ export async function pushActionToNotion(sb: SupabaseClient, actionId: string): 
   try {
     const values = {
       Estado: a.done ? 'Done' : 'Not started',
+      Status: a.done ? 'Done' : 'Not started',
       'Fecha Limite': a.due_date,
+      'Due Date': a.due_date,
       Prioridad: a.priority ? PRIORITY_OUT[a.priority] : null,
+      Priority: a.priority ? PRIORITY_P[a.priority] : null,
       ...responsableProps(a.responsable, org?.responsables),
     };
     if (isNotionId(a.notion_id)) {
       await updateRow(a.notion_id, values);
     } else if (org?.notion_tasks_db) {
       const id = await createRow(org.notion_tasks_db, {
-        'Task name': a.title, Name: a.title, Area: a.area, 'Notes & Links': a.why, ...values,
+        'Task name': a.title, Name: a.title, Task: a.title, Area: a.area, 'Notes & Links': a.why, Notes: a.why, ...values,
       });
       await sb.from('action_items').update({ notion_id: id }).eq('id', a.id);
     } else {

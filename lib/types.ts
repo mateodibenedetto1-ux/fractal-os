@@ -24,6 +24,7 @@ export interface Org {
   notion_calendars?: { id: string; label: string }[];
   last_synced_at?: string | null;
   responsables?: Responsable[];
+  notion_client_page?: string | null;
   created_at: string;
 }
 
@@ -33,6 +34,8 @@ export interface Responsable {
   notion_user?: string | null;
   /** Otras personas de Notion que cuentan como este responsable (por ejemplo, el resto del equipo de Fractal). */
   notion_alt?: string[];
+  /** Otras formas de nombrarlo en textos de Notion (por ejemplo "Lore"). */
+  aliases?: string[];
 }
 
 export interface Call {
@@ -62,6 +65,7 @@ export interface ActionItem {
   priority: 'critica' | 'alta' | 'media' | 'baja' | null;
   owner: 'cliente' | 'fractal';
   responsable?: string | null;
+  client_org_id?: string | null;
   notion_id?: string | null;
   notion_dirty?: boolean;
   due_date: string | null;

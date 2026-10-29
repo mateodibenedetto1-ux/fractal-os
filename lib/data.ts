@@ -109,12 +109,27 @@ export async function getAllOpenActions(): Promise<(ActionItem & { org: Pick<Org
   const sb = await supabaseServer();
   const { data } = await sb
     .from('action_items')
-    .select('*, org:organizations(name, slug)')
+    .select('*, org:organizations!action_items_org_id_fkey(name, slug, kind)')
     .eq('done', false)
     .is('parent_id', null)
     .order('created_at', { ascending: false })
     .limit(300);
   return (data ?? []) as (ActionItem & { org: Pick<Org, 'name' | 'slug'> })[];
+}
+
+/** Organización de Fractal (cuenta principal) y su tracker interno de tareas. */
+export async function getAgency(): Promise<Org | null> {
+  if (DEMO) return null;
+  const sb = await supabaseServer();
+  const { data } = await sb.from('organizations').select('*').eq('kind', 'agency').limit(1).maybeSingle();
+  return (data as Org) ?? null;
+}
+
+export async function getTeamTasks(agencyId: string): Promise<ActionItem[]> {
+  const sb = await supabaseServer();
+  const { data } = await sb.from('action_items').select('*').eq('org_id', agencyId)
+    .order('due_date', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false });
+  return (data ?? []) as ActionItem[];
 }
 
 export async function getCalls(orgId: string): Promise<Call[]> {

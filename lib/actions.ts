@@ -112,6 +112,7 @@ export async function addAction(form: FormData) {
     priority: str(form, 'priority'),
     owner: await ownerFor(sb, orgId, str(form, 'responsable'), str(form, 'owner')),
     responsable: str(form, 'responsable'),
+    client_org_id: str(form, 'client_org_id'),
     due_date: str(form, 'due_date'),
     source: 'manual',
     notion_dirty: true,
