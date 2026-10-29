@@ -428,3 +428,17 @@ export async function setRewardEstado(id: string, estado: string) {
   revalidateTag('goals');
   revalidatePath('/panel/objetivos');
 }
+
+/** Marca como hechos los accionables abiertos con fecha anterior a `before` y lo refleja en Notion. */
+export async function closeOverdueActions(orgId: string, before: string) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = await supabaseServer();
+  const { data } = await sb.from('action_items').update({ done: true })
+    .eq('org_id', orgId).eq('done', false).is('parent_id', null).lt('due_date', before)
+    .select('notion_id');
+  after(async () => {
+    for (const a of data ?? []) await pushActionStatus(a.notion_id, true);
+  });
+  refresh();
+}

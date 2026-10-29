@@ -1,14 +1,31 @@
-import { getActions, getCalls, getOrgBySlug } from '@/lib/data';
-import { addAction } from '@/lib/actions';
+import { getActions, getCalls, getMilestones, getOrgBySlug } from '@/lib/data';
+import { computeRoadmap } from '@/lib/roadmap';
+import { addAction, closeOverdueActions } from '@/lib/actions';
 import { DEMO } from '@/lib/env';
 import { fmtDate } from '@/lib/format';
 import { ActionList } from '@/components/ActionList';
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const org = await getOrgBySlug((await params).slug);
-  const [actions, calls] = await Promise.all([getActions(org.id), getCalls(org.id)]);
+  const [actions, calls, milestones] = await Promise.all([getActions(org.id), getCalls(org.id), getMilestones(org.id)]);
+  const roadmap = computeRoadmap(milestones, org.start_date);
+  const cutoff = roadmap.current?.due_date ?? null;
+  const stale = cutoff ? actions.filter((a) => !a.parent_id && !a.done && a.due_date && a.due_date < cutoff).length : 0;
   return (
     <div className="stack" style={{ gap: 24 }}>
+      {stale > 0 && cutoff && (
+        <div className="panel panel-pad row between wrap" style={{ gap: 12, borderColor: 'var(--warn)' }}>
+          <div className="grow" style={{ minWidth: 260 }}>
+            <b style={{ fontWeight: 500 }}>{stale} accionables quedaron de fases anteriores</b>
+            <p className="muted small" style={{ marginTop: 3 }}>
+              Tienen fecha anterior al inicio de {roadmap.current!.title} y siguen sin marcar. Si ya se hicieron, cerralos de una vez; también se marcan en Notion.
+            </p>
+          </div>
+          <form action={closeOverdueActions.bind(null, org.id, cutoff)}>
+            <button className="btn sm">Marcar {stale} como hechos</button>
+          </form>
+        </div>
+      )}
       <details className="panel panel-pad disclose">
         <summary className="row between"><b style={{ fontWeight: 600 }}>Agregar accionable</b><span className="btn sm">Abrir</span></summary>
         <form action={addAction} className="stack" style={{ gap: 14, marginTop: 16 }}>

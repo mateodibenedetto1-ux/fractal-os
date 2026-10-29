@@ -31,7 +31,7 @@ const FORMAT_TONE = (i: ContentItem) =>
 const KEY_LABEL = { fase: 'Inicio de fase', hito: 'Hito', llamada: 'Llamada' } as const;
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const monthName = (d: Date) => d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+const monthName = (d: Date) => { const s = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }); return s[0].toUpperCase() + s.slice(1); };
 const dayLabel = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
 interface Props {

@@ -28,6 +28,18 @@ export default async function Objetivos() {
     return rewards.filter((r) => r.hito?.includes(n) || r.hito?.includes(`${meta / 1000}k`) || r.title.includes(n));
   };
 
+  if (!live) {
+    return (
+      <>
+        <div className="page-head"><div><h1>Objetivos · Q4 2026</h1><p>Octubre a diciembre. Cada meta se marca como lograda solo con evidencia.</p></div></div>
+        <div className="panel panel-pad stack" style={{ gap: 8, maxWidth: 620 }}>
+          <b style={{ fontWeight: 500 }}>Falta darle acceso a Fractal Goals</b>
+          <p className="muted small">En Notion, abrí la página <b>Fractal</b> → ••• → Conexiones → agregá <b>Fractal OS</b>. Con eso se ven acá el Scoreboard y el Rewards Tracker de Q4, y se pueden actualizar.</p>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="page-head">
@@ -40,12 +52,6 @@ export default async function Objetivos() {
           <Counter n={unlocked} of={rewards.length} label="recompensas desbloqueadas" />
         </div>
       </div>
-      {!live && (
-        <div className="panel panel-pad stack" style={{ gap: 8, maxWidth: 620, marginBottom: 18 }}>
-          <b style={{ fontWeight: 500 }}>Falta darle acceso a Fractal Goals</b>
-          <p className="muted small">En Notion, abrí la página <b>Fractal</b> → ••• → Conexiones → agregá <b>Fractal OS</b>. Con eso se ven acá el Scoreboard y el Rewards Tracker de Q4, y se pueden actualizar.</p>
-        </div>
-      )}
 
       {ladder.length > 0 && (
         <section className="panel panel-pad" style={{ marginBottom: 28 }}>

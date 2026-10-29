@@ -353,6 +353,7 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .atlas tr.atlas-detail { cursor: default; background: var(--raised); }
 .atlas tr.atlas-detail td { padding: 16px 18px 18px; }
 .atlas .atlas-title { color: var(--ink); max-width: 360px; }
+.atlas td:nth-child(2), .atlas td:nth-child(7) { white-space: nowrap; }
 .atlas td.crit { color: var(--brand); }
 .type-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 7px; vertical-align: 1px; }
 .atlas tr:last-child td { border-bottom: 0; }
@@ -373,7 +374,7 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 /* ---------- Calendario ---------- */
 .cal { overflow: hidden; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
-.cal-head b { font-weight: 500; text-transform: capitalize; }
+.cal-head b { font-weight: 500; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal-dow { padding: 8px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line-soft); }
 .cal-day {
