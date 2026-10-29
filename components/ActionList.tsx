@@ -1,6 +1,6 @@
 'use client';
 
-import { useOptimistic, useState, useTransition } from 'react';
+import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import { deleteAction, setActionResponsable, toggleAction } from '@/lib/actions';
 import { fmtDate, PRIORITY_LABEL } from '@/lib/format';
 import type { ActionItem, Call, Responsable } from '@/lib/types';
@@ -24,6 +24,8 @@ interface Props {
 
 export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes', responsables = [], clientNames, progressLabel, flatLabel }: Props) {
   const [local, setLocal] = useState(items);
+  // Si el servidor trae datos nuevos (por ejemplo después de sincronizar con Notion), se reemplazan
+  useEffect(() => setLocal(items), [items]);
   const [optimistic, setOptimistic] = useOptimistic(local, (state, p: { id: string; done: boolean }) =>
     state.map((a) => (a.id === p.id ? { ...a, done: p.done } : a)),
   );

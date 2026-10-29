@@ -128,7 +128,7 @@ export async function getAgency(): Promise<Org | null> {
 export async function getTeamTasks(agencyId: string): Promise<ActionItem[]> {
   const sb = await supabaseServer();
   const { data } = await sb.from('action_items').select('*').eq('org_id', agencyId)
-    .order('due_date', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }).order('due_date', { ascending: true, nullsFirst: false });
   return (data ?? []) as ActionItem[];
 }
 

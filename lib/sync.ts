@@ -124,7 +124,8 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
         // Tracker de Fractal: la relación "Client" apunta a la ficha del cliente en Notion
         const clientRel: string[] = org.kind === 'agency' ? val(prop(r, 'Client')) ?? [] : [];
         const clientOrg = clientRel.map((x) => clientByPage.get(x)).find(Boolean) ?? null;
-        const extra = org.kind === 'agency' ? { client_org_id: clientOrg } : {};
+        // En el tracker de Fractal se ordena por fecha de creación en Notion
+        const extra = org.kind === 'agency' ? { client_org_id: clientOrg, created_at: r.created_time } : {};
         const cur = byNotion.get(id);
         if (cur?.notion_dirty) {
           res.tasks++;
