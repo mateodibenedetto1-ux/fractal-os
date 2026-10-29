@@ -8,8 +8,13 @@ import type { Goal } from '@/lib/goals';
 import type { PlanTask } from '@/lib/plan';
 
 const DOW = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const DOW_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+/** Título sin prefijos repetidos ("Fractal —", "[FRACTAL OS]", "HOY ·"). */
+const taskTitle = (t: string) => t.replace(/^\[[^\]]+\]\s*/, '').replace(/^(fractal|simple business|andy & exe|hoy)\s*[—·:-]\s*/i, '').replace(/^\d{1,2} oct\s*·\s*/i, '');
 const PEOPLE = ['Mateo', 'Lorena'];
 const dayNum = (s: string) => Number(s.slice(8, 10));
+/** Saca el prefijo "Val:", "Marcela:", etc., porque la marca ya se muestra arriba. */
+const goalTitle = (t: string) => t.replace(/^(Val|Marcela|BRAINZEED|Fractal Consulting|Baseline Creative|Mateo y Lorena|Mateo|Lorena)\s*:\s*/i, '');
 const short = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 
 interface Props {
@@ -35,7 +40,7 @@ export function WeekPlanner({ days, today, tasks, overdue, undated, goals, count
     setDone((d) => ({ ...d, [t.id]: next }));
     start(async () => {
       try {
-        await toggleAction(t.id, next);
+        await Promise.all([t.id, ...t.twins].map((id) => toggleAction(id, next)));
       } catch {
         setDone((d) => ({ ...d, [t.id]: !next }));
       }
@@ -74,7 +79,7 @@ export function WeekPlanner({ days, today, tasks, overdue, undated, goals, count
                   <div className="row between" style={{ gap: 8, alignItems: 'flex-start' }}>
                     <button className="wk-goal-body" onClick={() => setBrand(brand === g.marca ? 'Todas' : g.marca ?? 'Todas')} aria-pressed={brand === g.marca}>
                       <span className="wk-brand">{g.marca}</span>
-                      <span className="wk-goal-title">{g.title.replace(/^[^:]+:\s*/, '')}</span>
+                      <span className="wk-goal-title">{goalTitle(g.title)}</span>
                     </button>
                     <input type="checkbox" className="check" checked={achieved} onChange={() => toggleGoal(g)} aria-label="Objetivo logrado" />
                   </div>
@@ -116,23 +121,39 @@ export function WeekPlanner({ days, today, tasks, overdue, undated, goals, count
         </details>
       )}
 
-      <div className="wk-grid">
+      <nav className="wk-strip" aria-label="Días de la semana">
         {days.map((d, i) => {
           const list = visible.filter((t) => t.due_date === d);
+          const ok = list.filter(isDone).length;
           return (
-            <section key={d} className={`wk-day ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}`}>
-              <header>
-                <span>{DOW[i]}</span>
-                <b>{dayNum(d)}</b>
-                {list.length > 0 && <em>{list.filter(isDone).length}/{list.length}</em>}
-              </header>
-              <ul className="wk-list">
-                {list.map((t) => <TaskRow key={t.id} t={t} done={isDone(t)} onToggle={() => toggle(t)} />)}
-                {!list.length && <li className="wk-empty">—</li>}
-              </ul>
-            </section>
+            <a key={d} href={`#dia-${d}`} className={`wk-pill ${d === today ? 'today' : ''} ${list.length && ok === list.length ? 'clear' : ''}`}>
+              <span>{DOW[i]}</span>
+              <b>{dayNum(d)}</b>
+              <em>{list.length ? `${ok}/${list.length}` : '·'}</em>
+            </a>
           );
         })}
+      </nav>
+
+      <div className="wk-agenda">
+        {days.map((d, i) => {
+          const list = visible.filter((t) => t.due_date === d);
+          if (!list.length) return null;
+          const pending = list.filter((t) => !isDone(t)).length;
+          return (
+            <details key={d} id={`dia-${d}`} className={`wk-day ${d === today ? 'today' : ''}`} open={d >= today || pending > 0}>
+              <summary>
+                <b>{d === today ? 'Hoy' : DOW_LONG[i]}</b>
+                <span className="muted">{short(d)}</span>
+                <em>{pending ? `${pending} pendiente${pending > 1 ? 's' : ''}` : 'todo hecho'}</em>
+              </summary>
+              <ul className="wk-list">
+                {list.map((t) => <TaskRow key={t.id} t={t} done={isDone(t)} onToggle={() => toggle(t)} />)}
+              </ul>
+            </details>
+          );
+        })}
+        {!visible.length && <div className="panel empty">No hay tareas con fecha esta semana para este filtro.</div>}
       </div>
 
       {noDate.length > 0 && (
@@ -150,13 +171,12 @@ function TaskRow({ t, done, onToggle, showDate }: { t: PlanTask; done: boolean; 
     <li className={`wk-task ${done ? 'is-done' : ''}`}>
       <input type="checkbox" className="check" checked={done} onChange={onToggle} aria-label={`Marcar ${t.title}`} />
       <div className="grow" style={{ minWidth: 0 }}>
-        <Link href={t.href} className="wk-title">{t.title.replace(/^\[[^\]]+\]\s*/, '')}</Link>
-        <div className="wk-meta">
-          <i style={{ background: brandColor(t.brand) }} />
-          <span>{t.where}</span>
-          {t.responsable && <span>· {t.responsable}</span>}
-          {showDate && t.due_date && <span>· {short(t.due_date)}</span>}
-        </div>
+        <Link href={t.href} className="wk-title">{taskTitle(t.title)}</Link>
+      </div>
+      <div className="wk-meta">
+        <span className="wk-tag" style={{ ['--c' as string]: brandColor(t.brand) }}>{t.brand}</span>
+        {t.responsable && <span>{t.responsable}</span>}
+        {showDate && t.due_date && <span>{short(t.due_date)}</span>}
       </div>
     </li>
   );
@@ -168,7 +188,7 @@ function CounterCard({ g }: { g: Goal }) {
   return (
     <div className="wk-goal wk-counter" style={{ ['--c' as string]: brandColor(g.marca) }}>
       <span className="wk-brand">{g.marca}</span>
-      <span className="wk-goal-title">{g.title.replace(/^[^:]+:\s*/, '')}</span>
+      <span className="wk-goal-title">{goalTitle(g.title)}</span>
       <div className="wk-num">
         <b>{(g.actual ?? 0).toLocaleString('es-AR')}</b>
         <span className="muted"> / {(g.meta ?? 0).toLocaleString('es-AR')} {g.unidad?.toLowerCase()}</span>
@@ -181,7 +201,7 @@ function CounterCard({ g }: { g: Goal }) {
           <button className="btn sm">Guardar</button>
         </form>
       ) : (
-        <button className="btn ghost sm" style={{ paddingLeft: 0, marginTop: 4 }} onClick={() => setEditing(true)}>Actualizar número</button>
+        <button className="btn ghost sm" style={{ paddingLeft: 0, marginTop: 4, alignSelf: 'flex-start' }} onClick={() => setEditing(true)}>Actualizar número</button>
       ))}
     </div>
   );

@@ -12,6 +12,8 @@ export interface PlanTask {
   brand: Brand;
   where: string; // "Tracker" o el nombre del cliente
   href: string;
+  /** Misma tarea cargada en otra base (tracker y cliente): se marcan juntas. */
+  twins: string[];
 }
 
 export const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -52,8 +54,31 @@ export async function getPlanTasks(from: string, to: string) {
       brand: brandOf({ title: r.title, orgSlug: agency ? null : r.org?.slug, clientSlug: client?.slug ?? null }),
       where: agency ? (client ? `Tracker · ${client.name}` : 'Tracker') : r.org?.name ?? '',
       href: agency ? '/panel/tareas' : `/panel/clientes/${r.org?.slug}/accionables`,
+      twins: [],
     };
   };
-  const pick = (d: { data: unknown }) => ((d.data ?? []) as Row[]).filter(ours).map(map);
+  const pick = (d: { data: unknown }) => dedupe(((d.data ?? []) as Row[]).filter(ours).map(map));
   return { tasks: pick(inRange), overdue: pick(overdue), undated: pick(undated) };
+}
+
+const norm = (t: string) => t.toLowerCase()
+  .replace(/^\[[^\]]+\]\s*/, '').replace(/^(fractal|simple business|andy & exe|hoy)\s*[—·:-]\s*/, '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+
+/** Une la misma tarea si está en el tracker y en la base del cliente; queda la del cliente. */
+function dedupe(list: PlanTask[]): PlanTask[] {
+  const out: PlanTask[] = [];
+  const byKey = new Map<string, PlanTask>();
+  for (const t of list) {
+    const key = `${norm(t.title)}|${t.due_date ?? ''}`;
+    const prev = byKey.get(key);
+    if (!prev) { byKey.set(key, t); out.push(t); continue; }
+    const keepNew = prev.where.startsWith('Tracker') && !t.where.startsWith('Tracker');
+    const keep = keepNew ? t : prev;
+    const drop = keepNew ? prev : t;
+    keep.twins.push(drop.id, ...drop.twins);
+    keep.done = keep.done || drop.done;
+    if (keepNew) { out[out.indexOf(prev)] = t; byKey.set(key, t); }
+  }
+  return out;
 }
