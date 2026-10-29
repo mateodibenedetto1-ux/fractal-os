@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { getActions, getCalls, getDocs, getOrgBySlug, getResources, requireViewer } from '@/lib/data';
+import { getActions, getCalls, getDocs, getMilestones, getOrgBySlug, getResources, requireViewer } from '@/lib/data';
+import { computeRoadmap } from '@/lib/roadmap';
+import { RoadmapProgress } from '@/components/Roadmap';
 import { fmtDate } from '@/lib/format';
 import { Cells } from '@/components/Cells';
 import { Icon } from '@/components/Icon';
@@ -7,14 +9,15 @@ import { Icon } from '@/components/Icon';
 export default async function PortalHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const org = await getOrgBySlug(slug);
-  const [v, actions, calls, resources, docs] = await Promise.all([
-    requireViewer(), getActions(org.id), getCalls(org.id), getResources(org.id), getDocs(org.id),
+  const [v, actions, calls, resources, docs, milestones] = await Promise.all([
+    requireViewer(), getActions(org.id), getCalls(org.id), getResources(org.id), getDocs(org.id), getMilestones(org.id),
   ]);
+  const roadmap = computeRoadmap(milestones, org.start_date);
   const tops = actions.filter((a) => !a.parent_id);
   const pending = tops.filter((a) => !a.done);
   const pendingCalls = new Set(pending.map((a) => a.call_id).filter(Boolean)).size;
   const last = calls[0];
-  const name = v.isStaff ? org.contact_name ?? org.name : v.name;
+  const name = org.contact_name || (v.isStaff ? org.name : v.name);
   const base = `/c/${org.slug}`;
 
   const links = [
@@ -26,7 +29,7 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
   return (
     <>
       <section className="hello">
-        <h1>Bienvenido de vuelta, {name.split(' ')[0]}</h1>
+        <h1>Bienvenido de vuelta, {name}</h1>
         <p>
           {last
             ? `Tu última llamada fue el ${fmtDate(last.held_at)}. Acá tenés lo que quedó pendiente y todo lo que te compartimos.`
@@ -34,7 +37,13 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
         </p>
       </section>
 
-      <Link href={`${base}/accionables`} className="panel next-card" style={{ textDecoration: 'none' }}>
+      {roadmap.totalWeeks > 0 && (
+        <Link href={`${base}/roadmap`} className="panel panel-pad" style={{ display: 'block', marginTop: 32, textDecoration: 'none' }}>
+          <RoadmapProgress view={roadmap} compact />
+        </Link>
+      )}
+
+      <Link href={`${base}/accionables`} className="panel next-card" style={{ textDecoration: 'none', marginTop: roadmap.totalWeeks > 0 ? 12 : 32 }}>
         <div className="stack" style={{ gap: 12 }}>
           <b style={{ fontWeight: 600 }}>Próximos accionables</b>
           <span className="muted">

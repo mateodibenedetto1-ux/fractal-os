@@ -1,12 +1,16 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { APP_URL, DEMO } from './env';
 import { supabaseServer } from './supabase/server';
 import { supabaseAdmin } from './supabase/admin';
 import { kindFromUrl, materializeCall } from './process';
 import { requireStaff, requireViewer } from './data';
+import { after } from 'next/server';
+import { pushActionStatus, pushNewAction, syncAtlasFromNotion, syncOrgFromNotion, } from './sync';
+import { NOTION_DB, createRow, hasNotion, isNotionId, updateRow } from './notion';
+import type { Org } from './types';
 
 const str = (f: FormData, k: string) => {
   const v = f.get(k);
@@ -26,8 +30,10 @@ export async function toggleAction(id: string, done: boolean) {
   if (DEMO) return;
   await requireViewer();
   const sb = await supabaseServer();
-  const { error } = await sb.from('action_items').update({ done }).eq('id', id);
+  const { data, error } = await sb.from('action_items').update({ done }).eq('id', id).select('notion_id').single();
   if (error) throw new Error(error.message);
+  // Se refleja también en la base de tareas del cliente en Notion
+  after(() => pushActionStatus(data?.notion_id ?? null, done));
   refresh();
 }
 
@@ -94,8 +100,9 @@ export async function addAction(form: FormData) {
   if (DEMO) return;
   await requireStaff();
   const sb = await supabaseServer();
-  const { error } = await sb.from('action_items').insert({
-    org_id: str(form, 'org_id'),
+  const orgId = str(form, 'org_id');
+  const { data: created, error } = await sb.from('action_items').insert({
+    org_id: orgId,
     call_id: str(form, 'call_id'),
     parent_id: str(form, 'parent_id'),
     title: str(form, 'title'),
@@ -105,8 +112,13 @@ export async function addAction(form: FormData) {
     owner: str(form, 'owner') ?? 'cliente',
     due_date: str(form, 'due_date'),
     source: 'manual',
-  });
+  }).select('id, title, why, area, priority, due_date, parent_id').single();
   if (error) throw new Error(error.message);
+  if (created && !created.parent_id) {
+    const { data: org } = await sb.from('organizations').select('notion_tasks_db').eq('id', orgId!).single();
+    const notionId = await pushNewAction(org?.notion_tasks_db, created);
+    if (notionId) await sb.from('action_items').update({ notion_id: notionId }).eq('id', created.id);
+  }
   refresh();
 }
 
@@ -179,6 +191,7 @@ export async function addMilestone(form: FormData) {
     title: str(form, 'title'),
     detail: str(form, 'detail'),
     due_date: str(form, 'due_date'),
+    kind: str(form, 'kind') ?? 'hito',
     status: str(form, 'status') ?? 'pendiente',
   });
   if (error) throw new Error(error.message);
@@ -189,7 +202,7 @@ export async function setMilestoneStatus(id: string, status: string) {
   if (DEMO) return;
   await requireStaff();
   const sb = await supabaseServer();
-  await sb.from('milestones').update({ status }).eq('id', id);
+  await sb.from('milestones').update({ status, auto_status: false }).eq('id', id);
   refresh();
 }
 
@@ -320,4 +333,98 @@ export async function deleteConnection(id: string) {
   const sb = await supabaseServer();
   await sb.from('fathom_connections').delete().eq('id', id);
   refresh();
+}
+
+export async function resetMilestoneAuto(id: string) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = await supabaseServer();
+  await sb.from('milestones').update({ auto_status: true }).eq('id', id);
+  refresh();
+}
+
+// ---------- Sincronización con Notion ----------
+
+export async function syncClientNow(orgId: string) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = supabaseAdmin();
+  const { data: org } = await sb.from('organizations').select('*').eq('id', orgId).single();
+  if (org) await syncOrgFromNotion(sb, org as Org);
+  refresh();
+}
+
+export async function syncAtlasNow() {
+  if (DEMO) return;
+  await requireStaff();
+  await syncAtlasFromNotion(supabaseAdmin());
+  refresh();
+}
+
+// ---------- Laboratorio ----------
+
+export async function addLabEntry(form: FormData) {
+  if (DEMO) return;
+  const v = await requireStaff();
+  const sb = await supabaseServer();
+  const row = {
+    title: str(form, 'title')!,
+    tipo: str(form, 'tipo') ?? 'Aprendizaje',
+    area: str(form, 'area'),
+    prioridad: str(form, 'prioridad'),
+    cliente: str(form, 'cliente'),
+    responsable: str(form, 'responsable') ?? v.name,
+    fecha: str(form, 'fecha') ?? new Date().toISOString().slice(0, 10),
+    fuente: str(form, 'fuente'),
+    notas: str(form, 'notas'),
+    estado: 'Capturado',
+  };
+  if (!row.title) return;
+  const { data, error } = await sb.from('lab_entries').insert(row).select('id').single();
+  if (error) throw new Error(error.message);
+  // Respaldo en el Atlas de Notion
+  if (hasNotion() && data) {
+    try {
+      const notionId = await createRow(NOTION_DB.atlas, {
+        Registro: row.title, Tipo: row.tipo, 'Área': row.area, Estado: row.estado, Prioridad: row.prioridad,
+        Cliente: row.cliente, Responsable: row.responsable, Fecha: row.fecha, Fuente: row.fuente, Notas: row.notas,
+      });
+      await sb.from('lab_entries').update({ notion_id: notionId }).eq('id', data.id);
+    } catch (e) {
+      console.error('No se pudo guardar en el Atlas de Notion', e);
+    }
+  }
+  refresh();
+}
+
+export async function setLabEstado(id: string, estado: string) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = await supabaseServer();
+  const { data } = await sb.from('lab_entries').update({ estado, updated_at: new Date().toISOString() }).eq('id', id).select('notion_id').single();
+  if (isNotionId(data?.notion_id)) after(() => updateRow(data!.notion_id!, { Estado: estado }).catch(() => undefined));
+  refresh();
+}
+
+// ---------- Objetivos (se editan directo en Notion) ----------
+
+export async function updateGoalActual(form: FormData) {
+  if (DEMO) return;
+  await requireStaff();
+  const id = str(form, 'id');
+  const actual = str(form, 'actual');
+  if (!isNotionId(id) || actual === null) return;
+  const estado = str(form, 'estado');
+  await updateRow(id, { Actual: Number(actual.replace(/[^0-9.,-]/g, '').replace(',', '.')), ...(estado ? { Estado: estado } : {}) });
+  revalidateTag('goals');
+  revalidatePath('/panel/objetivos');
+}
+
+export async function setRewardEstado(id: string, estado: string) {
+  if (DEMO) return;
+  await requireStaff();
+  if (!isNotionId(id)) return;
+  await updateRow(id, { Estado: estado });
+  revalidateTag('goals');
+  revalidatePath('/panel/objetivos');
 }

@@ -19,6 +19,10 @@ export interface Org {
   program_url: string | null;
   notion_url: string | null;
   accent: string | null;
+  notion_tasks_db?: string | null;
+  notion_roadmap_db?: string | null;
+  notion_calendars?: { id: string; label: string }[];
+  last_synced_at?: string | null;
   created_at: string;
 }
 
@@ -90,6 +94,24 @@ export interface Milestone {
   due_date: string | null;
   status: 'pendiente' | 'en_curso' | 'listo';
   position: number;
+  kind?: 'fase' | 'hito';
+  auto_status?: boolean;
+}
+
+export interface LabEntry {
+  id: string;
+  notion_id: string | null;
+  title: string;
+  tipo: string | null;
+  area: string | null;
+  estado: string;
+  prioridad: string | null;
+  cliente: string | null;
+  responsable: string | null;
+  fecha: string | null;
+  fuente: string | null;
+  notas: string | null;
+  created_at: string;
 }
 
 export interface FathomConnection {
@@ -112,4 +134,17 @@ export interface ClientSummary extends Org {
   pending: number;
   total: number;
   lastCallAt: string | null;
+}
+
+export interface LabPage {
+  id: string;
+  notion_id: string;
+  section: 'cliente' | 'criterio';
+  client: string | null;
+  title: string;
+  happened: string | null;
+  learning: string | null;
+  rule: string | null;
+  summary: string | null;
+  position: number;
 }

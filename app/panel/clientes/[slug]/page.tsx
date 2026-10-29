@@ -1,11 +1,15 @@
-import { getActions, getCalls, getOrgBySlug } from '@/lib/data';
-import { updateClientAccount } from '@/lib/actions';
-import { fmtDate, STATUS_LABEL } from '@/lib/format';
+import { getActions, getCalls, getMilestones, getOrgBySlug } from '@/lib/data';
+import { computeRoadmap } from '@/lib/roadmap';
+import { RoadmapProgress } from '@/components/Roadmap';
+import { syncClientNow, updateClientAccount } from '@/lib/actions';
+import { fmtDate, relative, STATUS_LABEL } from '@/lib/format';
 import { Cells } from '@/components/Cells';
 
 export default async function Overview({ params }: { params: Promise<{ slug: string }> }) {
   const org = await getOrgBySlug((await params).slug);
-  const [actions, calls] = await Promise.all([getActions(org.id), getCalls(org.id)]);
+  const [actions, calls, milestones] = await Promise.all([getActions(org.id), getCalls(org.id), getMilestones(org.id)]);
+  const roadmap = computeRoadmap(milestones, org.start_date);
+  const overdue = actions.filter((a) => !a.parent_id && !a.done && a.due_date && a.due_date < new Date().toISOString().slice(0, 10)).length;
   const tops = actions.filter((a) => !a.parent_id);
   const done = tops.filter((a) => a.done).length;
   const doneRecently = tops.filter((a) => a.done_at && Date.now() - new Date(a.done_at).getTime() < 7 * 864e5).length;
@@ -42,6 +46,18 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
       </form>
 
       <aside className="stack" style={{ gap: 14 }}>
+        {roadmap.totalWeeks > 0 && <RoadmapProgress view={roadmap} />}
+        <div className="panel panel-pad stack" style={{ gap: 10 }}>
+          <span className="muted small">Notion</span>
+          <span className="small">
+            {org.notion_tasks_db ? 'Tareas y roadmap conectados. ' : 'Sin base de tareas conectada. '}
+            {org.last_synced_at ? `Última sincronización ${relative(org.last_synced_at)}.` : 'Todavía no se sincronizó.'}
+          </span>
+          {overdue > 0 && <span className="small" style={{ color: 'var(--warn)' }}>{overdue} accionables con la fecha vencida sin marcar.</span>}
+          <form action={syncClientNow.bind(null, org.id)}>
+            <button className="btn sm">Traer cambios de Notion</button>
+          </form>
+        </div>
         <div className="panel panel-pad stack" style={{ gap: 12 }}>
           <span className="muted small">Avance en accionables</span>
           <span className="serif" style={{ fontSize: 32, lineHeight: 1 }}>{done} de {tops.length}</span>

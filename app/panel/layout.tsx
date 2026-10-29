@@ -9,14 +9,12 @@ const NAV = [
   { href: '/panel', label: 'Home', icon: 'home', exact: true },
   { href: '/panel/clientes', label: 'Clientes', icon: 'users' },
   { href: '/panel/tareas', label: 'Tareas', icon: 'check' },
+  { href: '/panel/calendario', label: 'Calendario', icon: 'calendar' },
+  { href: '/panel/objetivos', label: 'Objetivos', icon: 'target' },
+  { href: '/panel/laboratorio', label: 'Laboratorio', icon: 'flask' },
   { href: '/panel/reuniones', label: 'Reuniones', icon: 'video' },
   { href: '/panel/integraciones', label: 'Integraciones', icon: 'plug' },
   { href: '/panel/ajustes', label: 'Ajustes', icon: 'gear' },
-];
-const SOON = [
-  { label: 'Calendario', icon: 'calendar' },
-  { label: 'Objetivos', icon: 'target' },
-  { label: 'Laboratorios', icon: 'flask' },
 ];
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
@@ -32,14 +30,6 @@ export default async function PanelLayout({ children }: { children: React.ReactN
               <NavLink key={n.href} href={n.href} className="nav" exact={n.exact}>
                 <Icon name={n.icon} /> {n.label}
               </NavLink>
-            ))}
-          </nav>
-          <nav aria-label="Próximamente">
-            <span className="group">Próximamente</span>
-            {SOON.map((n) => (
-              <span key={n.label} className="nav">
-                <Icon name={n.icon} /> {n.label}
-              </span>
             ))}
           </nav>
           <div className="row" style={{ marginTop: 'auto', padding: '0 10px' }}>

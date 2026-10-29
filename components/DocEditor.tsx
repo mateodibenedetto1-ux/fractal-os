@@ -1,6 +1,6 @@
 import { saveDoc } from '@/lib/actions';
 import type { Doc } from '@/lib/types';
-import { DOC_KIND } from './Library';
+import { DOC_KIND } from '@/lib/doc-kinds';
 
 export function DocEditor({ orgId, doc }: { orgId: string; doc?: Doc }) {
   return (

@@ -1,12 +1,14 @@
 import Link from 'next/link';
-import { getAllOpenActions, getInbox, getRecentCalls, getViewer, listClients } from '@/lib/data';
+import { getAllMilestones, getAllOpenActions, getInbox, getRecentCalls, getViewer, listClients } from '@/lib/data';
+import { computeRoadmap } from '@/lib/roadmap';
 import { fmtShort, relative, STATUS_LABEL } from '@/lib/format';
 import { Cells } from '@/components/Cells';
 
 export const metadata = { title: 'Home' };
 
 export default async function PanelHome() {
-  const [v, clients, open, inbox, recent] = await Promise.all([getViewer(), listClients(), getAllOpenActions(), getInbox(), getRecentCalls(6)]);
+  const [v, clients, open, inbox, recent, milestones] = await Promise.all([getViewer(), listClients(), getAllOpenActions(), getInbox(), getRecentCalls(6), getAllMilestones()]);
+  const phaseOf = (c: (typeof clients)[number]) => computeRoadmap(milestones.filter((m) => m.org_id === c.id), c.start_date);
   const active = clients.filter((c) => c.status === 'activo' || c.status === 'onboarding');
   const stale = active.filter((c) => !c.lastCallAt || Date.now() - new Date(c.lastCallAt).getTime() > 14 * 864e5);
   const fractalOwned = open.filter((a) => a.owner === 'fractal');
@@ -46,6 +48,14 @@ export default async function PanelHome() {
                 <Link href={`/panel/clientes/${c.slug}`} className="list-row">
                   <div className="grow">
                     <div style={{ fontWeight: 500 }}>{c.name}</div>
+                    {(() => {
+                      const r = phaseOf(c);
+                      return r.totalWeeks ? (
+                        <div className="small" style={{ color: 'var(--ink-2)', marginTop: 2 }}>
+                          {r.current?.title ?? r.next?.title} · semana {r.week} de {r.totalWeeks}
+                        </div>
+                      ) : null;
+                    })()}
                     <div className="muted small">{c.next_step ?? 'Sin próximo paso definido'}</div>
                   </div>
                   <div className="stack" style={{ alignItems: 'flex-end', gap: 6, maxWidth: 210 }}>

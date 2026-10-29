@@ -220,3 +220,24 @@ export async function getMembers(orgId: string): Promise<{ email: string; name: 
     return { email: p?.email ?? '', name: p?.full_name ?? '', role: m.role };
   });
 }
+
+export async function getLabEntries(): Promise<import('./types').LabEntry[]> {
+  if (DEMO) return [];
+  const sb = await supabaseServer();
+  const { data } = await sb.from('lab_entries').select('*').order('fecha', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+  return (data ?? []) as import('./types').LabEntry[];
+}
+
+export async function getAllMilestones(): Promise<Milestone[]> {
+  if (DEMO) return demo.demoMilestones;
+  const sb = await supabaseServer();
+  const { data } = await sb.from('milestones').select('*').order('due_date');
+  return (data ?? []) as Milestone[];
+}
+
+export async function getLabPages(): Promise<import('./types').LabPage[]> {
+  if (DEMO) return [];
+  const sb = await supabaseServer();
+  const { data } = await sb.from('lab_pages').select('*').order('position');
+  return (data ?? []) as import('./types').LabPage[];
+}
