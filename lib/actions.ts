@@ -531,5 +531,9 @@ export async function startJourney(orgId: string) {
     if (t.error) throw new Error(t.error.message);
     cursor = new Date(end); cursor.setDate(cursor.getDate() + 1);
   }
+  const last = new Date(cursor); last.setDate(last.getDate() - 1);
+  await sb.from('milestones').insert({
+    org_id: orgId, title: 'Cierre de Fractal Consulting', detail: 'Revisión final de los 9 módulos y próximos pasos.', due_date: iso(last), kind: 'hito', position: 99, brain_section: 'cierre',
+  });
   refresh();
 }
