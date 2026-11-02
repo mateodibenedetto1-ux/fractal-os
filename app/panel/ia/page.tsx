@@ -1,7 +1,7 @@
 import { listClients } from '@/lib/data';
 import { FractalChat } from '@/components/FractalChat';
 
-export const metadata = { title: 'Fractal IA · Fractal' };
+export const metadata = { title: 'Fractal IA' };
 
 export default async function IaPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
   const [clients, { c }] = await Promise.all([listClients(), searchParams]);

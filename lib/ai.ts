@@ -12,7 +12,7 @@ const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 const terms = (s: string) => norm(s).split(/[^a-z0-9%$]+/).filter((t) => t.length > 2 && !STOP.has(t));
 
 /** Corta un documento en bloques de ~1.800 caracteres respetando párrafos. */
-function chunk(text: string, size = 1800): string[] {
+function chunk(text: string, size = 2400): string[] {
   const out: string[] = [];
   let cur = '';
   for (const p of text.split(/\n{2,}/)) {
@@ -61,7 +61,7 @@ export async function retrieve(query: string, limit = 10): Promise<Chunk[]> {
   const out: Chunk[] = [];
   for (const c of scored) {
     const n = per.get(c.docId) ?? 0;
-    if (n >= 3) continue;
+    if (n >= 4) continue;
     per.set(c.docId, n + 1);
     out.push(c);
     if (out.length >= limit) break;

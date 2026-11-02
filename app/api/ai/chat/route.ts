@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const query = users.slice(-2).join(' ');
   const sb = await supabaseServer();
   const [chunks, client, { data: titles }] = await Promise.all([
-    retrieve(query, 10),
+    retrieve(query, 16),
     body?.client ? clientContext(body.client) : Promise.resolve(null),
     sb.from('kb_documents').select('title').eq('status', 'ok').order('title'),
   ]);
