@@ -608,3 +608,15 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .ai-input { display: flex; gap: 10px; align-items: flex-end; padding: 12px 14px; border-top: 1px solid var(--line-soft); background: var(--surface); }
 .ai-input .textarea { flex: 1; resize: none; max-height: 200px; }
 @media (max-width: 640px) { .ai { height: calc(100vh - 150px); } .ai-bar { flex-wrap: wrap; } .ai-bar .select { min-width: 0; width: 100%; } }
+.ai-connect h2 { font-weight: 400; font-size: 22px; margin-bottom: 4px; }
+.ai-connect > .row p { max-width: 640px; }
+.ai-steps { list-style: none; padding: 0; margin: 20px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.ai-steps li { display: flex; gap: 12px; padding: 14px; border: 1px solid var(--line-soft); border-radius: var(--r); background: var(--raised); }
+.ai-steps p { margin-top: 4px; line-height: 1.5; }
+.ai-step-n { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); font-size: 13px; font-weight: 600; }
+.ai-key-form { display: flex; gap: 10px; max-width: 560px; }
+.ai-key-form .input { flex: 1; font-family: ui-monospace, monospace; }
+.ai-key-ok { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ai-key-ok .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.portal .ai { height: calc(100vh - 300px); }
+@media (max-width: 640px) { .ai-key-form { flex-direction: column; } }

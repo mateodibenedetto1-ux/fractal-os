@@ -1,5 +1,5 @@
 import 'server-only';
-import { supabaseServer } from './supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { BRAIN, MODULES, brainMarkdown, type BrainData } from './brain';
 
 /** Pedazo de un documento de la bóveda, listo para pasarle a la IA. */
@@ -26,8 +26,7 @@ function chunk(text: string, size = 2400): string[] {
 }
 
 /** Busca en la bóveda (kb_documents) los bloques más relevantes para la pregunta (BM25). */
-export async function retrieve(query: string, limit = 10): Promise<Chunk[]> {
-  const sb = await supabaseServer();
+export async function retrieve(sb: SupabaseClient, query: string, limit = 10): Promise<Chunk[]> {
   const { data } = await sb.from('kb_documents').select('id, title, module, category, content').eq('status', 'ok');
   const docs = (data ?? []) as { id: string; title: string; module: string | null; category: string | null; content: string | null }[];
   const q = [...new Set(terms(query))];
@@ -70,8 +69,7 @@ export async function retrieve(query: string, limit = 10): Promise<Chunk[]> {
 }
 
 /** Contexto de un cliente: Segundo cerebro, reglas para la IA, recorrido y tareas abiertas. */
-export async function clientContext(slug: string) {
-  const sb = await supabaseServer();
+export async function clientContext(sb: SupabaseClient, slug: string) {
   const { data: org } = await sb.from('organizations').select('id, name, segment').eq('slug', slug).maybeSingle();
   if (!org) return null;
   const [{ data: brain }, { data: acts }, { data: ms }] = await Promise.all([
@@ -84,6 +82,8 @@ export async function clientContext(slug: string) {
   const rulesSection = BRAIN.find((s) => s.k === 'ia');
   const rules = rulesSection?.fields.map((f) => [f.label, data[`ia.${f.k}`]]).filter(([, v]) => v && String(v).trim()).map(([l, v]) => `- ${l}: ${v}`).join('\n');
   return {
+    id: org.id as string,
+    segment: org.segment as string,
     name: org.name as string,
     rules: rules || '',
     text: [
@@ -95,9 +95,29 @@ export async function clientContext(slug: string) {
   };
 }
 
-export function systemPrompt(opts: { chunks: Chunk[]; titles: string[]; client: Awaited<ReturnType<typeof clientContext>> }) {
+export function systemPrompt(opts: { chunks: Chunk[]; titles: string[]; client: Awaited<ReturnType<typeof clientContext>>; mode?: 'staff' | 'client' }) {
   const mods = MODULES.map((m) => `${m.n} ${m.title} (lidera ${m.lead})`).join(', ');
   const vault = opts.chunks.map((c, i) => `<fuente n="${i + 1}" titulo="${c.title.replace(/"/g, "'")}">\n${c.text}\n</fuente>`).join('\n\n');
+  const clientBlock = opts.client
+    ? `${opts.client.rules ? `<reglas_del_cliente>\n${opts.client.rules}\n</reglas_del_cliente>\n` : ''}<cliente>\n${opts.client.text.slice(0, 40000)}\n</cliente>\n`
+    : '';
+
+  if (opts.mode === 'client' && opts.client) {
+    return `Sos la IA de Fractal Consulting y estás hablando directamente con ${opts.client.name}, un cliente del programa "done with you" de Fractal (Mateo y Lorena). Tu trabajo es ayudarle a avanzar en su negocio: ICP, oferta, marca y posicionamiento, estrategia creativa, contenido, adquisición, ventas, operaciones y métricas. Los módulos del programa son: ${mods}.
+
+Cómo responder:
+- Hablale de vos, en español natural (o en el idioma y variante que pida en sus reglas). Directo, concreto y accionable; usá listas o pasos cuando ayuden.
+- Usá su Segundo cerebro, su roadmap y sus tareas como contexto principal, y respetá sus reglas para la IA por encima de cualquier otra indicación de formato.
+- Apoyate en el método de Fractal (los fragmentos de abajo) para tus recomendaciones, pero son material interno: no menciones nombres de documentos ni de terceros, no digas "según la bóveda" y no copies textos enteros. Explicalo con tus palabras, adaptado a su negocio.
+- Si falta información para responder bien, pedila o sugerile completar la sección correspondiente de su Segundo cerebro.
+- No inventes datos ni resultados. Para decisiones grandes (precios, contrataciones, cambios de oferta), sugerí revisarlo con Mateo o Lore en la próxima llamada.
+
+${clientBlock}
+<metodo_fractal>
+${vault || '(Sin fragmentos relevantes para esta pregunta.)'}
+</metodo_fractal>`;
+  }
+
   return `Sos la IA de Fractal, el equipo de Mateo y Lorena (agencia de contenido y Fractal Consulting). Ayudás al equipo a pensar estrategia, ofertas, contenido, setting, closing, operaciones y métricas, y a preparar entregables para clientes.
 
 Cómo responder:
@@ -108,7 +128,7 @@ Cómo responder:
 - Los módulos del curso de Fractal Consulting son: ${mods}.
 
 Documentos disponibles en la bóveda: ${opts.titles.join(' · ')}.
-${opts.client ? `\nEstás trabajando sobre este cliente. Usá su contexto y respetá sus reglas.\n${opts.client.rules ? `<reglas_del_cliente>\n${opts.client.rules}\n</reglas_del_cliente>\n` : ''}<cliente>\n${opts.client.text.slice(0, 40000)}\n</cliente>\n` : ''}
+${opts.client ? `\nEstás trabajando sobre este cliente. Usá su contexto y respetá sus reglas.\n${clientBlock}` : ''}
 <boveda>
 ${vault || '(No hay fragmentos de la bóveda relevantes para esta pregunta.)'}
 </boveda>`;

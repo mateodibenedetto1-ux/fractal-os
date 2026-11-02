@@ -7,19 +7,38 @@ import { marked } from 'marked';
 type Source = { id: string; title: string };
 type Msg = { role: 'user' | 'assistant'; content: string; sources?: Source[] };
 
-const SUGGESTIONS = [
+const STAFF_SUGGESTIONS = [
   'Armame un guion de setting para un lead frío de Instagram',
   '¿Cómo manejo la objeción "lo tengo que pensar"?',
   'Dame la estructura de una oferta de $100k según la bóveda',
   '¿Cómo delego las historias sin perder el criterio creativo?',
 ];
 
+const CLIENT_SUGGESTIONS = [
+  'Ayudame a definir mejor mi cliente ideal',
+  'Revisá mi oferta y decime qué mejorarías',
+  'Dame 5 ideas de reels para esta semana',
+  'Armame una secuencia de historias para vender',
+];
+
 marked.use({ renderer: { html: () => '' } }); // nunca renderizar HTML crudo del modelo
 
 const KEY = 'fractal-ia-chat';
 
-export function FractalChat({ clients, initialClient }: { clients: { slug: string; name: string }[]; initialClient?: string }) {
-  const [client, setClient] = useState(initialClient ?? '');
+
+interface Props {
+  clients?: { slug: string; name: string }[];
+  initialClient?: string;
+  /** Cliente fijo: oculta el selector (sección Fractal IA dentro de un cliente). */
+  fixedClient?: string;
+  /** "client": responde como consultor del cliente, con su API key, sin mostrar documentos internos. */
+  mode?: 'staff' | 'client';
+  intro?: string;
+}
+
+export function FractalChat({ clients = [], initialClient, fixedClient, mode = 'staff', intro }: Props) {
+  const [client, setClient] = useState(fixedClient ?? initialClient ?? '');
+  const SUGGESTIONS = mode === 'client' ? CLIENT_SUGGESTIONS : STAFF_SUGGESTIONS;
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,12 +47,12 @@ export function FractalChat({ clients, initialClient }: { clients: { slug: strin
 
   // Conversación por cliente, guardada solo en este navegador
   useEffect(() => {
-    try { setMsgs(JSON.parse(sessionStorage.getItem(`${KEY}:${client}`) ?? '[]')); } catch { setMsgs([]); }
+    try { setMsgs(JSON.parse(sessionStorage.getItem(`${KEY}:${mode}:${client}`) ?? '[]')); } catch { setMsgs([]); }
   }, [client]);
   useEffect(() => {
     if (busy) return;
-    try { sessionStorage.setItem(`${KEY}:${client}`, JSON.stringify(msgs.slice(-30))); } catch { /* sin storage */ }
-  }, [msgs, busy, client]);
+    try { sessionStorage.setItem(`${KEY}:${mode}:${client}`, JSON.stringify(msgs.slice(-30))); } catch { /* sin storage */ }
+  }, [msgs, busy, client, mode]);
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [msgs]);
 
   const send = async (text: string) => {
@@ -47,7 +66,7 @@ export function FractalChat({ clients, initialClient }: { clients: { slug: strin
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ client: client || undefined, messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({ client: client || undefined, mode, messages: next.map(({ role, content }) => ({ role, content })) }),
       });
       if (!res.ok || !res.body) throw new Error(await res.text());
       let sources: Source[] = [];
@@ -74,13 +93,15 @@ export function FractalChat({ clients, initialClient }: { clients: { slug: strin
   return (
     <div className="ai">
       <div className="ai-bar">
-        <label className="row" style={{ gap: 8 }}>
-          <span className="muted small">Contexto</span>
-          <select className="select" value={client} onChange={(e) => setClient(e.target.value)} disabled={busy}>
-            <option value="">Solo la bóveda de Fractal</option>
-            {clients.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-          </select>
-        </label>
+        {fixedClient ? <span className="muted small">{mode === 'client' ? 'Conoce tu Segundo cerebro, tu roadmap y tus tareas' : 'Con el contexto de este cliente'}</span> : (
+          <label className="row" style={{ gap: 8 }}>
+            <span className="muted small">Contexto</span>
+            <select className="select" value={client} onChange={(e) => setClient(e.target.value)} disabled={busy}>
+              <option value="">Solo la bóveda de Fractal</option>
+              {clients.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+            </select>
+          </label>
+        )}
         {msgs.length > 0 && <button className="btn ghost sm" onClick={() => setMsgs([])} disabled={busy}>Nueva conversación</button>}
       </div>
 
@@ -88,7 +109,7 @@ export function FractalChat({ clients, initialClient }: { clients: { slug: strin
         {!msgs.length && (
           <div className="ai-empty">
             <h2>¿En qué te ayudo?</h2>
-            <p className="muted">Respondo con la bóveda de Fractal (SOPs, setting, closing, ofertas){client ? ' y el Segundo cerebro del cliente elegido' : ''}, y te digo de qué documento sale cada cosa.</p>
+            <p className="muted">{intro ?? `Respondo con la bóveda de Fractal (SOPs, setting, closing, ofertas)${client ? ' y el Segundo cerebro del cliente elegido' : ''}, y te digo de qué documento sale cada cosa.`}</p>
             <div className="ai-suggest">
               {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => send(s)}>{s}</button>)}
             </div>
@@ -108,7 +129,7 @@ export function FractalChat({ clients, initialClient }: { clients: { slug: strin
                   </div>
                 ) : null}
               </>
-            ) : <p className="muted ai-typing">Buscando en la bóveda…</p>}
+            ) : <p className="muted ai-typing">{mode === 'client' ? 'Pensando…' : 'Buscando en la bóveda…'}</p>}
           </div>
         ))}
         <div ref={end} />

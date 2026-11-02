@@ -537,3 +537,32 @@ export async function startJourney(orgId: string) {
   });
   refresh();
 }
+
+// ---------- API key propia del cliente (Fractal IA) ----------
+
+async function canManageOrg(orgId: string) {
+  const v = await requireViewer();
+  if (!v.isStaff && !v.clientOrgIds.includes(orgId)) throw new Error('No tenés acceso a este cliente');
+  return v;
+}
+
+export async function connectAiKey(orgId: string, key: string): Promise<{ ok: boolean; error?: string }> {
+  if (DEMO) return { ok: false, error: 'No disponible en modo demo.' };
+  const v = await canManageOrg(orgId);
+  const k = key.trim();
+  if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k)) return { ok: false, error: 'Eso no parece una API key de Anthropic (empieza con "sk-ant-").' };
+  const { verifyAnthropicKey, storeAiKey } = await import('./aikeys');
+  const check = await verifyAnthropicKey(k);
+  if (!check.ok) return check;
+  await storeAiKey(orgId, k, v.id);
+  refresh();
+  return { ok: true };
+}
+
+export async function disconnectAiKey(orgId: string) {
+  if (DEMO) return;
+  await canManageOrg(orgId);
+  const { deleteAiKey } = await import('./aikeys');
+  await deleteAiKey(orgId);
+  refresh();
+}

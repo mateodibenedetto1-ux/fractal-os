@@ -19,14 +19,12 @@ export default async function ClientLayout({ children, params }: { children: Rea
             {org.program_month ? ` · Mes ${org.program_month}` : ''}
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <Link href={`/panel/ia?c=${org.slug}`} className="btn"><Icon name="spark" size={15} /> Preguntarle a la IA</Link>
-          <Link href={`/c/${org.slug}`} className="btn">Ver portal del cliente</Link>
-        </div>
+        <Link href={`/c/${org.slug}`} className="btn">Ver portal del cliente</Link>
       </div>
       <nav className="tabs" aria-label="Secciones del cliente">
         <NavLink href={base} exact>Resumen</NavLink>
         {org.segment === 'consulting' && <NavLink href={`${base}/cerebro`}>Segundo cerebro</NavLink>}
+        {org.segment === 'consulting' && <NavLink href={`${base}/ia`}>Fractal IA</NavLink>}
         <NavLink href={`${base}/accionables`}>Accionables</NavLink>
         <NavLink href={`${base}/llamadas`}>Llamadas</NavLink>
         <NavLink href={`${base}/recursos`}>Recursos</NavLink>

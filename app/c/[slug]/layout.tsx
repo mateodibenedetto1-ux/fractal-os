@@ -31,6 +31,7 @@ export default async function PortalLayout({ children, params }: { children: Rea
         <nav className="portal-nav" aria-label="Secciones">
           <NavLink href={base} exact>Inicio</NavLink>
           {org.segment === 'consulting' && <NavLink href={`${base}/cerebro`}>Segundo cerebro</NavLink>}
+          {org.segment === 'consulting' && <NavLink href={`${base}/ia`}>Fractal IA</NavLink>}
           <NavLink href={`${base}/accionables`}>Accionables</NavLink>
           <NavLink href={`${base}/recursos`}>Recursos</NavLink>
           <NavLink href={`${base}/biblioteca`}>Biblioteca</NavLink>
