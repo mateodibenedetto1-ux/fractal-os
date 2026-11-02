@@ -514,15 +514,17 @@ export async function startJourney(orgId: string) {
   for (const s of BRAIN) {
     const start = iso(cursor);
     const end = new Date(cursor); end.setDate(end.getDate() + s.weeks * 7 - 1);
-    await sb.from('milestones').insert({
+    const m = await sb.from('milestones').insert({
       org_id: orgId, title: `Etapa ${s.n} — ${s.stage}`, detail: s.intro, due_date: start, kind: 'fase', position: s.n, brain_section: s.k,
     });
+    if (m.error) throw new Error(m.error.message);
     const due = iso(end);
-    await sb.from('action_items').insert([
+    const t = await sb.from('action_items').insert([
       { org_id: orgId, title: `Ver la clase de ${s.stage} en Skool`, why: org?.program_url ? `Programa: ${org.program_url}` : 'La clase de esta etapa está en Skool.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
       { org_id: orgId, title: `Completar ${s.title} en tu Segundo cerebro`, why: 'Se tilda solo cuando la sección llega al 80 %.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
       { org_id: orgId, title: `Revisar ${s.stage} con Fractal en la llamada`, why: 'Ajustamos juntos lo que completaste y definimos el próximo paso.', owner: 'fractal', responsable: 'Fractal', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
     ]);
+    if (t.error) throw new Error(t.error.message);
     cursor = new Date(end); cursor.setDate(cursor.getDate() + 1);
   }
   refresh();

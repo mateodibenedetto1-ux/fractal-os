@@ -363,3 +363,6 @@ create policy brain_rw on client_brain for all using (can_see_org(org_id)) with 
 -- Etapas del recorrido: a qué sección del Segundo cerebro corresponde cada fase y cada tarea
 alter table milestones add column if not exists brain_section text;
 alter table action_items add column if not exists brain_section text;
+-- Las tareas del recorrido tienen su propio origen
+alter table action_items drop constraint if exists action_items_source_check;
+alter table action_items add constraint action_items_source_check check (source in ('fathom','manual','notion','ia','recorrido'));
