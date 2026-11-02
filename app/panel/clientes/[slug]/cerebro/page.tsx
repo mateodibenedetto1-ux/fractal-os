@@ -16,8 +16,8 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           <b style={{ fontWeight: 500 }}>{started ? 'Recorrido Fractal creado' : 'Crear el Recorrido Fractal'}</b>
           <p className="muted small" style={{ marginTop: 3 }}>
             {started
-              ? 'Cada sección es una etapa del roadmap con sus tareas: ver la clase, completar la sección y revisarla con Fractal. Volver a crearlo reemplaza esas fases y tareas.'
-              : 'Genera una fase por sección desde la fecha de inicio, con tres tareas en cada una. Las de completar se tildan solas al llegar al 80 %.'}
+              ? 'Los 9 módulos del curso son las fases del roadmap (3 meses), cada una con sus tareas: ver las clases, completar sus secciones y revisarlas con Mateo o Lore. Volver a crearlo reemplaza esas fases y tareas.'
+              : 'Genera los 9 módulos del curso como fases de 3 meses desde la fecha de inicio, con sus tareas. Las de completar se tildan solas cuando la sección llega al 80 %.'}
           </p>
         </div>
         <form action={startJourney.bind(null, org.id)}>

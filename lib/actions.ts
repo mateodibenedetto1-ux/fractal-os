@@ -499,31 +499,35 @@ export async function saveBrain(orgId: string, patch: Record<string, string>) {
   }
 }
 
-/** Crea el Recorrido Fractal de un cliente de Consulting: una fase por sección y sus tareas. */
+/** Crea el Recorrido Fractal de un cliente de Consulting: una fase por módulo del curso y sus tareas. */
 export async function startJourney(orgId: string) {
   if (DEMO) return;
   await requireStaff();
   const sb = supabaseAdmin();
   const { data: org } = await sb.from('organizations').select('start_date, program_url').eq('id', orgId).single();
-  const { BRAIN } = await import('./brain');
+  const { BRAIN, MODULES } = await import('./brain');
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   let cursor = new Date((org?.start_date ?? iso(new Date())) + 'T12:00:00');
   await sb.from('action_items').delete().eq('org_id', orgId).eq('source', 'recorrido');
   await sb.from('milestones').delete().eq('org_id', orgId).not('brain_section', 'is', null);
   let pos = 0;
-  for (const s of BRAIN) {
+  for (const m of MODULES) {
     const start = iso(cursor);
-    const end = new Date(cursor); end.setDate(end.getDate() + s.weeks * 7 - 1);
-    const m = await sb.from('milestones').insert({
-      org_id: orgId, title: `Etapa ${s.n} — ${s.stage}`, detail: s.intro, due_date: start, kind: 'fase', position: s.n, brain_section: s.k,
+    const end = new Date(cursor); end.setDate(end.getDate() + m.weeks * 7 - 1);
+    const lead = m.lead === 'Lorena' ? 'Lore' : m.lead === 'Mateo' ? 'Mateo' : 'Mateo y Lore';
+    const ms = await sb.from('milestones').insert({
+      org_id: orgId, title: `Módulo ${m.n} — ${m.title}`, detail: `${m.about} Lo guía ${lead}.`, due_date: start, kind: 'fase', position: Number(m.n), brain_section: m.k,
     });
-    if (m.error) throw new Error(m.error.message);
+    if (ms.error) throw new Error(ms.error.message);
     const due = iso(end);
-    const t = await sb.from('action_items').insert([
-      { org_id: orgId, title: `Ver la clase de ${s.stage} en Skool`, why: org?.program_url ? `Programa: ${org.program_url}` : 'La clase de esta etapa está en Skool.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
-      { org_id: orgId, title: `Completar ${s.title} en tu Segundo cerebro`, why: 'Se tilda solo cuando la sección llega al 80 %.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
-      { org_id: orgId, title: `Revisar ${s.stage} con Fractal en la llamada`, why: 'Ajustamos juntos lo que completaste y definimos el próximo paso.', owner: 'fractal', responsable: 'Fractal', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
-    ]);
+    const rows = [
+      { org_id: orgId, title: `Ver las clases del módulo ${m.n} · ${m.title}`, why: org?.program_url ? `En Skool: ${org.program_url}` : 'Las clases de este módulo están en Skool.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: null as string | null },
+      ...BRAIN.filter((s) => s.mod === m.k).map((s) => ({
+        org_id: orgId, title: `Completar ${s.title} en tu Segundo cerebro`, why: 'Se tilda sola cuando la sección llega al 80 %.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k,
+      })),
+      { org_id: orgId, title: `Revisar ${m.title} con ${lead} en la llamada`, why: 'Ajustamos juntos lo que completaste y definimos el próximo paso.', owner: 'fractal', due_date: due, position: pos++, source: 'recorrido', brain_section: null },
+    ];
+    const t = await sb.from('action_items').insert(rows);
     if (t.error) throw new Error(t.error.message);
     cursor = new Date(end); cursor.setDate(cursor.getDate() + 1);
   }

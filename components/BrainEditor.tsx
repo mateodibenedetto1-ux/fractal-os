@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { saveBrain } from '@/lib/actions';
-import { BRAIN, brainMarkdown, brainPct, sectionPct, type BrainData } from '@/lib/brain';
+import { BRAIN, MODULES, brainMarkdown, brainPct, sectionPct, type BrainData } from '@/lib/brain';
 
 interface Props {
   orgId: string;
@@ -50,6 +50,7 @@ export function BrainEditor({ orgId, name, initial, demo }: Props) {
 
   const section = BRAIN.find((s) => s.k === active)!;
   const idx = BRAIN.indexOf(section);
+  const mod = MODULES.find((m) => m.k === section.mod)!;
   const total = brainPct(data);
 
   const go = (k: string) => {
@@ -76,16 +77,21 @@ export function BrainEditor({ orgId, name, initial, demo }: Props) {
           <div className="bar"><span style={{ width: `${total}%` }} /></div>
         </div>
         <nav aria-label="Secciones">
-          {BRAIN.map((s) => {
-            const p = sectionPct(data, s);
-            return (
-              <button key={s.k} className={`brain-tab ${s.k === active ? 'on' : ''} ${p === 100 ? 'full' : ''}`} onClick={() => go(s.k)}>
-                <i>{s.n}</i>
-                <span>{s.title}</span>
-                <em>{p}%</em>
-              </button>
-            );
-          })}
+          {MODULES.map((m) => (
+            <div key={m.k} className="brain-mod">
+              <span className="brain-mod-title">{m.n} · {m.title}</span>
+              {BRAIN.filter((s) => s.mod === m.k).map((s) => {
+                const p = sectionPct(data, s);
+                return (
+                  <button key={s.k} className={`brain-tab ${s.k === active ? 'on' : ''} ${p === 100 ? 'full' : ''}`} onClick={() => go(s.k)}>
+                    <i>{s.n}</i>
+                    <span>{s.title}</span>
+                    <em>{p}%</em>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="row" style={{ gap: 8, marginTop: 14 }}>
           <span className={`muted small brain-status ${status}`}>
@@ -96,7 +102,7 @@ export function BrainEditor({ orgId, name, initial, demo }: Props) {
       </aside>
 
       <section className="brain-body" key={section.k}>
-        <div className="brain-kicker">Sección {section.n} de {BRAIN.length} · Etapa {section.stage}</div>
+        <div className="brain-kicker">Sección {section.n} de {BRAIN.length} · Módulo {mod.n} {mod.title}</div>
         <h2>{section.title}</h2>
         <p className="muted">{section.intro}</p>
         <div className="bar" style={{ margin: '14px 0 26px', maxWidth: 260 }}><span style={{ width: `${sectionPct(data, section)}%` }} /></div>

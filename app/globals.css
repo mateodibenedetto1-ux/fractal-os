@@ -572,3 +572,11 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
   .brain-tab em { display: none; }
   .journey-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 12px; }
 }
+.brain-mod { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.brain-mod-title { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 2px; }
+.journey-steps { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+@media (max-width: 860px) {
+  .brain-mod { flex-direction: row; margin: 0; }
+  .brain-mod-title { display: none; }
+  .journey-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
