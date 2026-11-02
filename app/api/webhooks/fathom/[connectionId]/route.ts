@@ -3,7 +3,7 @@ import { after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { externalEmails, verifyFathomSignature, type FathomMeeting } from '@/lib/fathom';
 import { matchOrg, materializeCall } from '@/lib/process';
-import { matchTeamRule, type TeamTitleRule } from '@/lib/team';
+import { guessTeamKind, matchTeamRule, type TeamTitleRule } from '@/lib/team';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -41,7 +41,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ connectionId: 
       const byTitle = matchTeamRule((agency.team_titles ?? []) as TeamTitleRule[], m.meeting_title || m.title || '');
       if (byTitle || (emails.length && matchOrg([{ ...agency, contact_email: null }], emails))) {
         orgId = agency.id;
-        teamKind = byTitle ?? 'equipo';
+        teamKind = byTitle ?? guessTeamKind(m.meeting_title || m.title || '') ?? 'equipo';
       }
     }
   }

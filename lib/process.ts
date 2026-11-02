@@ -4,7 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { linksIn, transcriptToText, type FathomMeeting } from './fathom';
 import type { Org, ResourceKind } from './types';
 import { pushActionToNotion } from './sync';
-import { NOTION_DB, createRow, hasNotion, notionApi } from './notion';
+import { NOTION_DB, createRow, hasNotion, mdToBlocks, notionApi, updateRow } from './notion';
+import { APP_URL } from './env';
 import { teamLabel } from './team';
 
 export interface Extraction {
@@ -266,6 +267,7 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
 
     // Reunión del equipo: lo aprendido va al Laboratorio (y al Atlas de Notion). No se duplica al regenerar.
     if (team && ex.learnings?.length) await saveTeamLearnings(sb, call, team, ex.learnings);
+    if (team) await saveTeamCallToNotion(sb, call, team, ex, created.length).catch((e) => console.error('No se pudo guardar la llamada en Notion', e));
 
     await sb.from('calls').update({ status: 'procesada', summary_md: ex.summary_md, error: ex.fallback ? `Sin IA (se usó Fathom): ${ex.fallback}` : null }).eq('id', callId);
     return { ok: true as const, actions: ex.actions.length };
@@ -310,4 +312,35 @@ async function saveTeamLearnings(
       console.error('No se pudo guardar en el Atlas de Notion', e);
     }
   }
+}
+
+/** Reunión del equipo → fila en "Llamadas del equipo" (Notion · Fulfillment), con el resumen como contenido. */
+async function saveTeamCallToNotion(
+  sb: SupabaseClient,
+  call: { id: string; title: string; held_at: string; share_url: string | null; notion_page?: string | null },
+  team: string,
+  ex: Extraction,
+  tasks: number,
+) {
+  if (!hasNotion()) return;
+  const short = ex.summary_md.replace(/[#*`>]/g, '').replace(/\n+/g, ' ').trim().slice(0, 1900);
+  const values = {
+    Llamada: call.title, Fecha: call.held_at.slice(0, 10), Tipo: team, 'Grabación': call.share_url,
+    Resumen: short, Tareas: tasks, Aprendizajes: ex.learnings?.length ?? 0, 'Fractal OS': `${APP_URL}/panel/laboratorio?v=equipo`,
+  };
+  let pageId = call.notion_page ?? null;
+  if (pageId) {
+    await updateRow(pageId, values).catch(() => { pageId = null; });
+    if (pageId) {
+      // Reemplaza el contenido con el resumen nuevo
+      const kids = await notionApi<{ results: { id: string }[] }>(`blocks/${pageId}/children?page_size=100`);
+      for (const k of kids.results) await notionApi(`blocks/${k.id}`, { method: 'DELETE' }).catch(() => undefined);
+    }
+  }
+  if (!pageId) {
+    pageId = await createRow(NOTION_DB.teamCalls, values);
+    await sb.from('calls').update({ notion_page: pageId }).eq('id', call.id);
+  }
+  const blocks = mdToBlocks(ex.summary_md);
+  if (blocks.length) await notionApi(`blocks/${pageId}/children`, { method: 'PATCH', body: { children: blocks } });
 }

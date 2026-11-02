@@ -97,7 +97,36 @@ export const NOTION_DB = {
   atlas: process.env.NOTION_ATLAS_DB ?? 'f1e283474c2a42059568c1c21d4d01bd',
   goals: process.env.NOTION_GOALS_DB ?? '0e99110393d647589dcc5eaefdf70e26',
   rewards: process.env.NOTION_REWARDS_DB ?? 'ae77b03ceacb4ffbad485e36f337f74c',
+  /** Llamadas del equipo (Fulfillment). */
+  teamCalls: process.env.NOTION_TEAM_CALLS_DB ?? '238ea339130d418c9747532d9a4cb9d6',
 };
+
+/** Markdown simple → bloques de Notion (títulos, viñetas, numeradas y párrafos). */
+export function mdToBlocks(md: string) {
+  const rt = (t: string) => {
+    // **negrita** y texto plano, cortado a 2000 caracteres por trozo
+    const out: { type: 'text'; text: { content: string }; annotations?: { bold: boolean } }[] = [];
+    t.split(/(\*\*[^*]+\*\*)/).filter(Boolean).forEach((part) => {
+      const bold = /^\*\*.*\*\*$/.test(part);
+      const content = (bold ? part.slice(2, -2) : part).replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 2000);
+      if (content) out.push({ type: 'text', text: { content }, ...(bold ? { annotations: { bold: true } } : {}) });
+    });
+    return out;
+  };
+  const blocks: Record<string, unknown>[] = [];
+  for (const raw of md.split('\n')) {
+    const line = raw.trimEnd();
+    if (!line.trim() || /^-{3,}$/.test(line.trim())) continue;
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    const b = line.match(/^\s*[-*•]\s+(.*)$/);
+    const n = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (h) { const type = `heading_${Math.min(3, h[1].length + 1)}`; blocks.push({ object: 'block', type, [type]: { rich_text: rt(h[2]) } }); }
+    else if (b) blocks.push({ object: 'block', type: 'bulleted_list_item', bulleted_list_item: { rich_text: rt(b[1]) } });
+    else if (n) blocks.push({ object: 'block', type: 'numbered_list_item', numbered_list_item: { rich_text: rt(n[1]) } });
+    else blocks.push({ object: 'block', type: 'paragraph', paragraph: { rich_text: rt(line.trim()) } });
+  }
+  return blocks.slice(0, 100);
+}
 
 export const hasNotion = () => Boolean(TOKEN());
 export const plainId = (id: string) => id.replace(/-/g, '');

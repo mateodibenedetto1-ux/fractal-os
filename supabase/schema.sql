@@ -425,3 +425,6 @@ alter table action_items add constraint action_items_source_check check (source 
 -- 010: cada hito y tarea del roadmap personalizado sabe a qué etapa (módulo) pertenece
 alter table milestones add column if not exists module text;
 alter table action_items add column if not exists module text;
+
+-- 011: cada reunión del equipo queda también en "Llamadas del equipo" (Notion · Fulfillment)
+alter table calls add column if not exists notion_page text;
