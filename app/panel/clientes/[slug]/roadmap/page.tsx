@@ -2,11 +2,14 @@ import { getMilestones, getOrgBySlug } from '@/lib/data';
 import { addMilestone, deleteMilestone, resetMilestoneAuto, setMilestoneStatus } from '@/lib/actions';
 import { computeRoadmap } from '@/lib/roadmap';
 import { Roadmap } from '@/components/Roadmap';
+import { getJourneyView } from '@/lib/journey-view';
+import { JourneyRoadmap } from '@/components/JourneyRoadmap';
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const org = await getOrgBySlug((await params).slug);
-  const view = computeRoadmap(await getMilestones(org.id), org.start_date);
-  return (
+  const [milestones, journey] = await Promise.all([getMilestones(org.id), org.segment === 'consulting' ? getJourneyView(org) : Promise.resolve(null)]);
+  const view = computeRoadmap(milestones, org.start_date);
+  const editor = (
     <div className="stack" style={{ gap: 24 }}>
       <p className="muted small" style={{ maxWidth: '70ch' }}>
         El estado de cada fase se calcula con la fecha de hoy: lo que ya pasó queda completado y la fase vigente aparece como &ldquo;Ahora&rdquo;.
@@ -47,6 +50,16 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         </div>
         <div><button className="btn primary">Agregar</button></div>
       </form>
+    </div>
+  );
+  if (!journey) return editor;
+  return (
+    <div className="stack" style={{ gap: 20 }}>
+      <JourneyRoadmap view={journey} base={`/panel/clientes/${org.slug}`} staff />
+      <details className="panel panel-pad disclose">
+        <summary className="row between"><b style={{ fontWeight: 500 }}>Editar fechas e hitos</b><span className="btn sm">Abrir</span></summary>
+        <div style={{ marginTop: 16 }}>{editor}</div>
+      </details>
     </div>
   );
 }

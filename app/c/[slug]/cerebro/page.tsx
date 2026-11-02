@@ -5,18 +5,18 @@ import { BrainEditor } from '@/components/BrainEditor';
 
 export const metadata = { title: 'Segundo cerebro' };
 
-export default async function Cerebro({ params }: { params: Promise<{ slug: string }> }) {
+export default async function Cerebro({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ s?: string }> }) {
   const org = await getOrgBySlug((await params).slug);
   if (org.segment !== 'consulting') notFound();
   const [data, meta] = await Promise.all([getBrain(org.id), getBrainMeta(org.id)]);
   return (
     <>
-      <section className="hello">
+      <header className="ai-head">
         <h1>Tu Segundo cerebro</h1>
-        <p>Todo lo que define tu marca, tu cliente, tu oferta y tu operación, en un solo lugar. La IA de Fractal lo lee en cada conversación: escribilo con tus palabras y con datos reales.</p>
-      </section>
-      <div style={{ marginTop: 30 }} className="stack">
-        <BrainEditor orgId={org.id} name={org.name} initial={data} demo={DEMO} roadmap={meta} roadmapHref={`/c/${org.slug}/roadmap`} />
+        <p className="muted small">Tu marca, tu cliente, tu oferta y tu operación. Escribilo con tus palabras: de acá salen tu roadmap y la IA.</p>
+      </header>
+      <div style={{ marginTop: 18 }}>
+        <BrainEditor orgId={org.id} name={org.name} initial={data} demo={DEMO} roadmap={meta} initialSection={(await searchParams).s} roadmapHref={`/c/${org.slug}/roadmap`} />
       </div>
     </>
   );

@@ -5,6 +5,7 @@ import { BRAIN, MODULES, brainMarkdown, brainPct, type BrainData } from './brain
 import { NOTION_MARKER, notionPageMarkdown } from './notion';
 import { retrieve } from './ai';
 import { pushActionToNotion } from './sync';
+import { buildJourney, journeyStart, leadShort, stageWindows } from './journey';
 
 /** Con este porcentaje del Segundo cerebro completo se crea el roadmap personalizado. */
 export const ROADMAP_THRESHOLD = 80;
@@ -16,20 +17,28 @@ const weeksBetween = (a: string, b: string) => Math.max(1, Math.floor((new Date(
 
 interface Plan {
   resumen_md: string;
-  hitos: { title: string; detalle?: string; semana: number }[];
-  tareas: { title: string; por_que?: string; owner?: 'cliente' | 'fractal'; responsable?: string; semana: number; area?: string; prioridad?: 'critica' | 'alta' | 'media' | 'baja' }[];
+  etapas: { modulo: string; objetivo: string; entregable?: string }[];
+  hitos: { title: string; detalle?: string; modulo: string }[];
+  tareas: { title: string; por_que?: string; owner?: 'cliente' | 'fractal'; responsable?: string; modulo: string; area?: string; prioridad?: 'critica' | 'alta' | 'media' | 'baja' }[];
 }
+
+const MOD_KEYS = MODULES.map((m) => m.k);
 
 const TOOL: Anthropic.Tool = {
   name: 'guardar_roadmap',
-  description: 'Guarda el roadmap personalizado del cliente.',
+  description: 'Guarda el roadmap personalizado del cliente, etapa por etapa.',
   input_schema: {
     type: 'object',
     properties: {
       resumen_md: { type: 'string', description: 'Documento en Markdown para el cliente.' },
+      etapas: {
+        type: 'array',
+        description: 'Una por módulo, en orden.',
+        items: { type: 'object', properties: { modulo: { type: 'string', enum: MOD_KEYS }, objetivo: { type: 'string' }, entregable: { type: 'string' } }, required: ['modulo', 'objetivo'] },
+      },
       hitos: {
         type: 'array',
-        items: { type: 'object', properties: { title: { type: 'string' }, detalle: { type: 'string' }, semana: { type: 'integer', minimum: 1, maximum: 12 } }, required: ['title', 'semana'] },
+        items: { type: 'object', properties: { title: { type: 'string' }, detalle: { type: 'string' }, modulo: { type: 'string', enum: MOD_KEYS } }, required: ['title', 'modulo'] },
       },
       tareas: {
         type: 'array',
@@ -38,14 +47,14 @@ const TOOL: Anthropic.Tool = {
           properties: {
             title: { type: 'string' }, por_que: { type: 'string' },
             owner: { type: 'string', enum: ['cliente', 'fractal'] }, responsable: { type: 'string' },
-            semana: { type: 'integer', minimum: 1, maximum: 12 },
+            modulo: { type: 'string', enum: MOD_KEYS },
             area: { type: 'string' }, prioridad: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'] },
           },
-          required: ['title', 'semana'],
+          required: ['title', 'modulo'],
         },
       },
     },
-    required: ['resumen_md', 'hitos', 'tareas'],
+    required: ['resumen_md', 'etapas', 'hitos', 'tareas'],
   },
 };
 
@@ -97,17 +106,20 @@ async function fractalStandard(orgId: string) {
 }
 
 const SYSTEM = `Sos el estratega de Fractal Consulting (Mateo lidera oferta, adquisición, ventas, operaciones, métricas y sistemas; Lorena lidera creatividad, posicionamiento, narrativa y contenido).
-Tu trabajo es crear el roadmap personalizado de 12 semanas de un cliente que acaba de completar su Segundo cerebro.
+Tu trabajo es crear el roadmap personalizado de un cliente que completó su Segundo cerebro.
+
+El roadmap sigue SIEMPRE las etapas del Recorrido Fractal, que son los módulos del curso y las secciones del Segundo cerebro, en este orden:
+{ETAPAS}
 
 Cómo hacerlo:
-- Basate en TODO lo que escribió el cliente en su Segundo cerebro (punto de partida, cliente ideal, oferta, marca, narrativa, estrategia creativa, contenido, adquisición, ventas, operación, métricas), no solo en sus objetivos.
-- Usá como estándar cómo armamos los roadmaps, estrategias creativas y de marketing de los demás clientes de Fractal: las fases típicas, el orden, los tiempos y el tipo de hitos se repiten. Replicá ese patrón y adaptalo a este negocio.
-- El programa sigue los 9 módulos del curso en este orden y duración: {MODULOS}. Los hitos y tareas tienen que caer en la semana que corresponde a su módulo, salvo que el negocio necesite adelantar algo (por ejemplo, un lanzamiento ya planificado).
-- hitos: entre 6 y 10 logros concretos y verificables del negocio (no "ver clases"): ej. "Oferta validada con 3 ventas", "Primer lanzamiento de historias", "Sistema de setting funcionando". Con semana (1 a 12).
-- tareas: entre 15 y 28 tareas accionables, título con verbo y menos de 90 caracteres, con semana, owner ("cliente" lo hace el cliente; "fractal" lo hace el equipo), por_que (una frase de negocio), area y prioridad. No repitas las tareas genéricas del recorrido (ver clases, completar secciones, revisar con Mateo/Lore).
-- resumen_md: documento para el cliente, en español natural y de vos, con: "## Dónde estás hoy" (diagnóstico corto basado en sus datos), "## Tu norte a 90 días" (objetivo y métricas), "## Las fases" (una por bloque de semanas, qué se logra en cada una y por qué en ese orden), "## Lo que no vamos a hacer todavía" y "## Cómo medimos el avance". Conciso y específico para su negocio, sin relleno.
-- No inventes datos: si algo del Segundo cerebro está vacío, proponé una tarea para definirlo.
-- Respondé únicamente llamando a la herramienta guardar_roadmap.`;
+- Basate en TODO lo que escribió el cliente en cada sección de su Segundo cerebro (no solo en sus objetivos). Cada etapa trabaja sobre sus secciones: por ejemplo, en "ICP & Research" profundizás su punto de partida y su cliente de alto valor; en "Oferta", su oferta y escalera; y así.
+- Usá como estándar cómo armamos los roadmaps, estrategias creativas y de marketing de los demás clientes de Fractal: el tipo de hitos, el ritmo y el orden se repiten. Replicá ese patrón y adaptalo a este negocio.
+- etapas: una por cada módulo (las 9), con "objetivo" (1 o 2 frases, específicas para este negocio, de vos: qué va a lograr en esta etapa con lo que ya escribió) y "entregable" (lo concreto que queda hecho al terminarla).
+- hitos: 1 por etapa (2 si la etapa es de 2 semanas y lo amerita). Logros verificables del negocio, no "ver clases". Ej: "Oferta líder validada en 5 conversaciones".
+- tareas: 2 a 4 por etapa, accionables, título con verbo y menos de 90 caracteres, con owner ("cliente" o "fractal"), por_que (una frase de negocio), area y prioridad. No repitas las tareas que ya trae cada etapa: ver las clases, completar las secciones del Segundo cerebro y revisarlo con Mateo/Lore.
+- Si algo del Segundo cerebro está vacío o flojo, la tarea de esa etapa es definirlo o mejorarlo.
+- resumen_md: documento para el cliente, en español natural y de vos, con: "## Dónde estás hoy" (diagnóstico corto con sus datos), "## Tu norte a 90 días" (objetivo y métricas), "## Tu recorrido, etapa por etapa" (una línea por etapa con lo que logra), "## Lo que no vamos a hacer todavía" y "## Cómo medimos el avance". Conciso y específico.
+- No inventes datos. Respondé únicamente llamando a la herramienta guardar_roadmap.`;
 
 /** Genera el roadmap personalizado (hitos + tareas + documento) para un cliente de consultoría. */
 export async function generateRoadmap(orgId: string): Promise<{ ok: boolean; error?: string }> {
@@ -125,49 +137,73 @@ export async function generateRoadmap(orgId: string): Promise<{ ok: boolean; err
     const data = (brain.data ?? {}) as BrainData;
     await setStatus('generando', { roadmap_error: null });
 
-    const std = await fractalStandard(orgId);
-    let week = 1;
-    const mods = MODULES.map((m) => { const s = `${m.n} ${m.title} (semanas ${week}–${week + m.weeks - 1}, lidera ${m.lead})`; week += m.weeks; return s; }).join('; ');
+    // El roadmap se apoya en el Recorrido (etapas por módulo). Si no existe, se crea ahora.
+    const { data: orgFull } = await sb.from('organizations').select('start_date, program_url').eq('id', orgId).single();
+    const { start, exists } = await journeyStart(sb, orgId, orgFull?.start_date ?? null);
+    if (!exists) await buildJourney(sb, orgId, start, orgFull?.program_url ?? null);
+    const wins = stageWindows(start);
     const today = iso(new Date(Date.now() - 3 * 3600e3));
-    const start = org.start_date && org.start_date > today ? org.start_date : today;
+
+    const std = await fractalStandard(orgId);
+    const etapas = wins.map((w) => {
+      const secs = BRAIN.filter((b) => b.mod === w.k).map((b) => b.title).join(', ');
+      return `${w.n} ${w.title} · semanas ${w.startWeek}–${w.endWeek} (${w.start} a ${w.end}) · lidera ${leadShort(w.lead)} · secciones del Segundo cerebro: ${secs}`;
+    }).join('\n');
 
     const anthropic = new Anthropic({ apiKey: key });
     const msg = await anthropic.messages.stream({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
       max_tokens: 16000,
-      system: SYSTEM.replace('{MODULOS}', mods),
+      system: SYSTEM.replace('{ETAPAS}', etapas),
       tools: [TOOL],
       tool_choice: { type: 'auto' },
       messages: [{
         role: 'user',
-        content: `Cliente: ${org.name}\nInicio del roadmap: ${start} (semana 1)\n\n<segundo_cerebro>\n${brainMarkdown(data, org.name)}\n</segundo_cerebro>\n\n<roadmaps_de_otros_clientes>\n${std.roadmaps || '(sin datos)'}\n</roadmaps_de_otros_clientes>\n\n<estrategias_de_otros_clientes>\n${std.strategy || '(sin datos)'}\n</estrategias_de_otros_clientes>\n\n<boveda_fractal>\n${std.vault || '(sin datos)'}\n</boveda_fractal>`,
+        content: `Cliente: ${org.name}\nHoy: ${today}\n\n<segundo_cerebro>\n${brainMarkdown(data, org.name)}\n</segundo_cerebro>\n\n<roadmaps_de_otros_clientes>\n${std.roadmaps || '(sin datos)'}\n</roadmaps_de_otros_clientes>\n\n<estrategias_de_otros_clientes>\n${std.strategy || '(sin datos)'}\n</estrategias_de_otros_clientes>\n\n<boveda_fractal>\n${std.vault || '(sin datos)'}\n</boveda_fractal>`,
       }],
     }).finalMessage();
     const block = msg.content.find((b) => b.type === 'tool_use');
     if (!block || block.type !== 'tool_use') throw new Error('La IA no devolvió el roadmap en el formato esperado');
     const plan = block.input as Plan;
 
-    // Reemplaza un roadmap anterior (los hitos del recorrido por módulo quedan)
+    // Reemplaza un roadmap anterior (las etapas y tareas base del recorrido quedan)
     await sb.from('milestones').delete().eq('org_id', orgId).eq('source', 'ia');
     await sb.from('action_items').delete().eq('org_id', orgId).eq('source', 'roadmap').eq('done', false);
     await sb.from('documents').delete().eq('org_id', orgId).eq('kind', 'estrategia').like('title', 'Tu roadmap personalizado%');
 
-    const wk = (n: number, dayOfWeek = 4) => addDays(start, (Math.min(12, Math.max(1, Math.round(n || 1))) - 1) * 7 + dayOfWeek);
+    const win = (k: string) => wins.find((w) => w.k === k) ?? wins[0];
+    const notPast = (d: string) => (d < today ? today : d);
+
+    // Objetivo personalizado de cada etapa
+    for (const e of plan.etapas ?? []) {
+      const m = MODULES.find((x) => x.k === e.modulo);
+      if (!m) continue;
+      const detail = `${e.objetivo}${e.entregable ? `\n\nEntregable: ${e.entregable}` : ''}\n\nLo guía ${leadShort(m.lead)}.`;
+      await sb.from('milestones').update({ detail }).eq('org_id', orgId).eq('kind', 'fase').eq('brain_section', m.k);
+    }
+
     if (plan.hitos?.length) {
-      const { error } = await sb.from('milestones').insert(plan.hitos.slice(0, 12).map((h, i) => ({
-        org_id: orgId, title: h.title.slice(0, 160), detail: h.detalle ?? null, due_date: wk(h.semana), kind: 'hito', source: 'ia', position: 100 + i,
+      const { error } = await sb.from('milestones').insert(plan.hitos.slice(0, 14).map((h, i) => ({
+        org_id: orgId, title: h.title.slice(0, 160), detail: h.detalle ?? null, due_date: win(h.modulo).end, kind: 'hito', source: 'ia', module: win(h.modulo).k, position: 100 + i,
       })));
       if (error) throw new Error(error.message);
     }
 
     const resps = (org.responsables ?? []) as { name: string; side: string; aliases?: string[] }[];
     const findResp = (n?: string) => n ? resps.find((r) => [r.name, ...(r.aliases ?? [])].some((x) => x.toLowerCase() === n.toLowerCase())) : undefined;
-    const rows = (plan.tareas ?? []).slice(0, 30).map((t, i) => {
+    const perMod = new Map<string, number>();
+    const rows = (plan.tareas ?? []).slice(0, 36).map((t, i) => {
       const r = findResp(t.responsable);
+      const w = win(t.modulo);
+      // Reparte las tareas de cada etapa entre su inicio y su fin
+      const n = perMod.get(w.k) ?? 0;
+      perMod.set(w.k, n + 1);
+      const span = (new Date(w.end).getTime() - new Date(w.start).getTime()) / DAY;
+      const due = addDays(w.start, Math.min(span, 2 + n * 2));
       return {
         org_id: orgId, title: t.title.slice(0, 200), why: t.por_que ?? null, area: t.area ?? null, priority: t.prioridad ?? null,
         owner: (r?.side as 'cliente' | 'fractal') ?? t.owner ?? 'cliente', responsable: r?.name ?? null,
-        due_date: wk(t.semana), position: 200 + i, source: 'roadmap', notion_dirty: true,
+        due_date: notPast(due), position: 200 + i, source: 'roadmap', module: w.k, notion_dirty: true,
       };
     });
     if (rows.length) {

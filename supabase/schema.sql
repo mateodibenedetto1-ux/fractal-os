@@ -421,3 +421,7 @@ alter table client_brain add column if not exists roadmap_error text;
 alter table milestones add column if not exists source text;             -- 'ia' = hito del roadmap personalizado
 alter table action_items drop constraint if exists action_items_source_check;
 alter table action_items add constraint action_items_source_check check (source in ('fathom','manual','notion','ia','recorrido','roadmap'));
+
+-- 010: cada hito y tarea del roadmap personalizado sabe a qué etapa (módulo) pertenece
+alter table milestones add column if not exists module text;
+alter table action_items add column if not exists module text;

@@ -4,7 +4,7 @@ import { startJourney } from '@/lib/actions';
 import { DEMO } from '@/lib/env';
 import { BrainEditor } from '@/components/BrainEditor';
 
-export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+export default async function Page({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ s?: string }> }) {
   const org = await getOrgBySlug((await params).slug);
   if (org.segment !== 'consulting') notFound();
   const [data, milestones, meta] = await Promise.all([getBrain(org.id), getMilestones(org.id), getBrainMeta(org.id)]);
@@ -24,7 +24,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           <button className={`btn ${started ? '' : 'primary'}`}>{started ? 'Volver a crear' : 'Crear recorrido'}</button>
         </form>
       </div>
-      <BrainEditor orgId={org.id} name={org.name} initial={data} demo={DEMO} roadmap={meta} staff roadmapHref={`/panel/clientes/${org.slug}/roadmap`} />
+      <BrainEditor orgId={org.id} name={org.name} initial={data} demo={DEMO} roadmap={meta} initialSection={(await searchParams).s} staff roadmapHref={`/panel/clientes/${org.slug}/roadmap`} />
     </div>
   );
 }

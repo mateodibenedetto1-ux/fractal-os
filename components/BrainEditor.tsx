@@ -16,11 +16,13 @@ interface Props {
   /** Vista del equipo: puede volver a crear el roadmap. */
   staff?: boolean;
   roadmapHref?: string;
+  /** Sección a abrir (desde el roadmap: ?s=oferta). */
+  initialSection?: string;
 }
 
-export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadmapHref }: Props) {
+export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadmapHref, initialSection }: Props) {
   const [data, setData] = useState<BrainData>(initial);
-  const [active, setActive] = useState(() => BRAIN.find((s) => sectionPct(initial, s) < 100)?.k ?? BRAIN[0].k);
+  const [active, setActive] = useState(() => (initialSection && BRAIN.some((s) => s.k === initialSection) ? initialSection : BRAIN.find((s) => sectionPct(initial, s) < 100)?.k ?? BRAIN[0].k));
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const pending = useRef<Record<string, string>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,10 +92,14 @@ export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadma
     }
   };
 
+  // Al cambiar de sección solo se mueve la página si el comienzo de la sección quedó fuera de la vista
   const go = (k: string) => {
     void flush();
     setActive(k);
-    top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const el = top.current;
+    if (!el) return;
+    const y = el.getBoundingClientRect().top;
+    if (y < 0) window.scrollTo({ top: window.scrollY + y - 16, behavior: 'smooth' });
   };
 
   const download = () => {
@@ -105,52 +111,40 @@ export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadma
     URL.revokeObjectURL(a.href);
   };
 
-  const banner = (
-    <div className={`panel panel-pad brain-roadmap ${rm.roadmap_status ?? 'pendiente'}`}>
+  const date = (d: string | null) => new Date(d ?? Date.now()).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  const roadmapCard = (
+    <div className={`brain-rm ${rm.roadmap_status ?? 'pendiente'}`}>
       {rm.roadmap_status === 'listo' ? (
-        <div className="row between wrap" style={{ gap: 12 }}>
-          <div className="grow" style={{ minWidth: 240 }}>
-            <b>Roadmap personalizado listo</b>
-            <p className="muted small">Creado el {new Date(rm.roadmap_at ?? Date.now()).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })} a partir de este Segundo cerebro. Tiene los hitos de las 12 semanas, las tareas en Accionables y el documento con la estrategia en Biblioteca.</p>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
+        <>
+          <b>Roadmap listo</b>
+          <span className="muted small">Creado el {date(rm.roadmap_at)} con tu Segundo cerebro.</span>
+          <div className="row" style={{ gap: 6, marginTop: 6 }}>
             {roadmapHref && <a className="btn primary sm" href={roadmapHref}>Ver roadmap</a>}
-            {staff && <button className="btn sm" disabled={rmBusy} onClick={() => { if (confirm('¿Volver a crear el roadmap? Reemplaza los hitos y las tareas pendientes que creó la IA.')) void createRoadmap(); }}>Volver a crear</button>}
+            {staff && <button className="btn ghost sm" disabled={rmBusy} onClick={() => { if (confirm('¿Volver a crear el roadmap? Reemplaza los hitos y las tareas pendientes que creó la IA.')) void createRoadmap(); }}>Rehacer</button>}
           </div>
-        </div>
+        </>
       ) : rm.roadmap_status === 'generando' ? (
-        <div>
-          <b className="ai-typing">Creando tu roadmap personalizado…</b>
-          <p className="muted small">Lo armamos con todo lo que escribiste y con cómo trabajamos con todos nuestros clientes. Tarda 1 o 2 minutos; podés seguir acá.</p>
-        </div>
+        <>
+          <b className="ai-typing">Creando tu roadmap…</b>
+          <span className="muted small">Tarda 1 o 2 minutos. Podés seguir completando.</span>
+        </>
       ) : rm.roadmap_status === 'error' ? (
-        <div className="row between wrap" style={{ gap: 12 }}>
-          <div className="grow" style={{ minWidth: 240 }}>
-            <b>No se pudo crear el roadmap</b>
-            <p className="muted small">{staff ? rm.roadmap_error : 'Volvé a intentar en un rato. Si sigue fallando, avisale al equipo de Fractal.'}</p>
-          </div>
-          <button className="btn sm" disabled={rmBusy} onClick={() => void createRoadmap()}>Reintentar</button>
-        </div>
+        <>
+          <b>No se pudo crear el roadmap</b>
+          <span className="muted small">{staff ? rm.roadmap_error : 'Probá de nuevo en un rato.'}</span>
+          <button className="btn sm" style={{ marginTop: 6, alignSelf: 'flex-start' }} disabled={rmBusy} onClick={() => void createRoadmap()}>Reintentar</button>
+        </>
       ) : (
-        <div className="row between wrap" style={{ gap: 12 }}>
-          <div className="grow" style={{ minWidth: 240 }}>
-            <b>{total >= THRESHOLD ? 'Ya podés crear tu roadmap' : `Completá el ${THRESHOLD} % y creamos tu roadmap`}</b>
-            <p className="muted small">
-              {total >= THRESHOLD
-                ? 'Con lo que escribiste armamos tu roadmap personalizado de 12 semanas.'
-                : `Cuando llegues al ${THRESHOLD} %, se crea solo tu roadmap personalizado de 12 semanas, basado en lo que escribas acá. Te falta ${THRESHOLD - total} %.`}
-            </p>
-            <div className="bar" style={{ maxWidth: 320, marginTop: 8 }}><span style={{ width: `${Math.min(100, (total / THRESHOLD) * 100)}%` }} /></div>
-          </div>
-          {(total >= THRESHOLD || staff) && <button className="btn primary sm" disabled={rmBusy || demo} onClick={() => void createRoadmap()}>Crear roadmap</button>}
-        </div>
+        <>
+          <b>{total >= THRESHOLD ? 'Ya podés crear tu roadmap' : `Tu roadmap se crea al ${THRESHOLD} %`}</b>
+          <span className="muted small">{total >= THRESHOLD ? 'Lo armamos con lo que escribiste.' : `Te falta ${THRESHOLD - total} % para tu roadmap personalizado.`}</span>
+          {(total >= THRESHOLD || staff) && <button className="btn primary sm" style={{ marginTop: 6, alignSelf: 'flex-start' }} disabled={rmBusy || demo} onClick={() => void createRoadmap()}>Crear roadmap</button>}
+        </>
       )}
     </div>
   );
 
   return (
-    <>
-    {banner}
     <div className="brain" ref={top}>
       <aside className="brain-index">
         <div className="brain-total">
@@ -158,6 +152,7 @@ export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadma
           <span className="muted small">de tu Segundo cerebro completo</span>
           <div className="bar"><span style={{ width: `${total}%` }} /></div>
         </div>
+        {roadmapCard}
         <nav aria-label="Secciones">
           {MODULES.map((m) => (
             <div key={m.k} className="brain-mod">
@@ -212,6 +207,5 @@ export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadma
         </div>
       </section>
     </div>
-    </>
   );
 }
