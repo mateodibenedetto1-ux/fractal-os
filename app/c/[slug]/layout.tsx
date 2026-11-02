@@ -4,6 +4,7 @@ import { DEMO } from '@/lib/env';
 import { signOut } from '@/lib/actions';
 import { Mark } from '@/components/Mark';
 import { NavLink } from '@/components/NavLink';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default async function PortalLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -21,6 +22,7 @@ export default async function PortalLayout({ children, params }: { children: Rea
           <Mark href={base} />
           <div className="row">
             <span className="muted small">{org.name}</span>
+            <ThemeToggle />
             {!DEMO && !v.isStaff && (
               <form action={signOut}>
                 <button className="btn ghost sm">Salir</button>

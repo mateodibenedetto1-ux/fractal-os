@@ -42,6 +42,25 @@
   }
 }
 
+/* Elegido a mano con el botón de tema (portal) */
+:root[data-theme='dark'] {
+    --bg: #121615;
+    --surface: #181d1c;
+    --raised: #1e2422;
+    --ink: #e5e9e7;
+    --ink-2: #c3cac7;
+    --muted: #8b9592;
+    --line: #2d3532;
+    --line-soft: #242b29;
+    --brand: #b8574f;
+    --brand-soft: #34201e;
+    --ok: #6fb592;
+    --warn: #d6a64a;
+    --focus: #7fb1de;
+    color-scheme: dark;
+}
+
+
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
@@ -676,3 +695,6 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
   .jr-grid { grid-template-columns: 1fr; gap: 6px; }
   .jr-steps { grid-template-columns: repeat(9, 84px); }
 }
+
+.theme-toggle { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 520px) { .theme-toggle span { display: none; } }
