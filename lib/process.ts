@@ -12,6 +12,8 @@ export interface Extraction {
   actions: { title: string; why?: string; area?: string; priority?: 'critica' | 'alta' | 'media' | 'baja'; owner?: 'cliente' | 'fractal'; responsable?: string; due_date?: string; subtasks?: string[] }[];
   resources: { title: string; url: string }[];
   learnings?: { title: string; tipo: string; area?: string; notas?: string }[];
+  /** Si Claude falló y se usaron los datos de Fathom, el motivo. */
+  fallback?: string;
 }
 
 const TEAM_SYSTEM = `Sos el asistente operativo de Fractal, una agencia de contenido y consultora de crecimiento.
@@ -97,12 +99,14 @@ const TOOL: Anthropic.Tool = {
 /** Usa Claude si hay API key; si no, cae a lo que manda Fathom. */
 export async function extract(input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string; team?: string; fathomSummary?: string | null; fathomActions?: FathomMeeting['action_items'] }): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
+  let fallback = !key ? 'Falta ANTHROPIC_API_KEY' : 'La llamada no tiene transcript';
   if (key && input.transcript.trim()) {
     try {
       return await extractWithClaude(key, input);
     } catch (e) {
       // Clave vencida o inválida, sin saldo, etc.: seguimos con lo que mandó Fathom en vez de perder la llamada.
-      console.error('Claude no pudo procesar la llamada, uso los datos de Fathom:', e instanceof Error ? e.message : e);
+      fallback = e instanceof Error ? e.message : String(e);
+      console.error('Claude no pudo procesar la llamada, uso los datos de Fathom:', fallback);
     }
   }
   // Fallback sin IA: los action items de Fathom o, si no vienen, los "Próximos pasos" del resumen
@@ -111,6 +115,7 @@ export async function extract(input: { title: string; clientName?: string; heldA
     summary_md: input.fathomSummary || '_Sin resumen disponible._',
     actions: fromFathom.length ? fromFathom : nextStepsFromSummary(input.fathomSummary ?? ''),
     resources: linksIn(input.transcript).map((url) => ({ title: titleFromUrl(url), url })),
+    fallback: fallback.slice(0, 300),
   };
 }
 
@@ -218,7 +223,7 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
     await sb.from('action_items').delete().eq('call_id', callId).in('source', ['fathom', 'ia']);
     await sb.from('documents').delete().eq('call_id', callId).eq('kind', 'resumen');
 
-    const source = process.env.ANTHROPIC_API_KEY ? 'ia' : 'fathom';
+    const source = ex.fallback ? 'fathom' : 'ia';
     let pos = 0;
     const created: string[] = [];
     for (const a of ex.actions) {
@@ -258,7 +263,7 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
     // Reunión del equipo: lo aprendido va al Laboratorio (y al Atlas de Notion). No se duplica al regenerar.
     if (team && ex.learnings?.length) await saveTeamLearnings(sb, call, team, ex.learnings);
 
-    await sb.from('calls').update({ status: 'procesada', summary_md: ex.summary_md, error: null }).eq('id', callId);
+    await sb.from('calls').update({ status: 'procesada', summary_md: ex.summary_md, error: ex.fallback ? `Sin IA (se usó Fathom): ${ex.fallback}` : null }).eq('id', callId);
     return { ok: true as const, actions: ex.actions.length };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
