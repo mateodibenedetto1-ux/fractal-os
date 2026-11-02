@@ -2,6 +2,7 @@ import { getInbox, getRecentCalls, listClients } from '@/lib/data';
 import { assignCall, deleteCall } from '@/lib/actions';
 import { fmtDate } from '@/lib/format';
 import Link from 'next/link';
+import { TEAM_KINDS, guessTeamKind, teamLabel } from '@/lib/team';
 
 export const metadata = { title: 'Reuniones' };
 
@@ -12,13 +13,15 @@ export default async function Meetings() {
       <div className="page-head">
         <div>
           <h1>Reuniones</h1>
-          <p>Cada llamada de Fathom entra acá. Si reconocemos el email del cliente se asigna sola.</p>
+          <p>Cada llamada de Fathom entra acá. Si reconocemos el email del cliente se asigna sola. Las reuniones del equipo (daily, creativity core, editores) van a Equipo y lo que aprendemos queda en el Laboratorio.</p>
         </div>
       </div>
 
       <h2 className="section-title">Sin asignar · {inbox.length}</h2>
       <ul className="list panel" style={{ marginBottom: 30 }}>
-        {inbox.map((c) => (
+        {inbox.map((c) => {
+          const guess = guessTeamKind(c.title);
+          return (
           <li key={c.id} className="list-row wrap">
             <div className="grow" style={{ minWidth: 220 }}>
               <div style={{ fontWeight: 500 }}>{c.title}</div>
@@ -26,16 +29,22 @@ export default async function Meetings() {
             </div>
             <form action={assignCall} className="row wrap">
               <input type="hidden" name="call_id" value={c.id} />
-              <select className="select" name="org_id" required defaultValue="" style={{ width: 200 }} aria-label="Cliente">
-                <option value="" disabled>Elegir cliente</option>
-                {clients.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              <select className="select" name="org_id" required defaultValue={guess ? `team:${guess}` : ''} style={{ width: 220 }} aria-label="Cliente o equipo">
+                <option value="" disabled>Elegir cliente o equipo</option>
+                <optgroup label="Equipo Fractal">
+                  {TEAM_KINDS.map((t) => <option key={t.k} value={`team:${t.k}`}>Equipo · {t.l}</option>)}
+                </optgroup>
+                <optgroup label="Clientes">
+                  {clients.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </optgroup>
               </select>
-              <label className="row small"><input type="checkbox" name="remember" defaultChecked /> Recordar este email</label>
+              <label className="row small" title="Las próximas llamadas con este email (o, en el equipo, con este mismo título) se asignan solas"><input type="checkbox" name="remember" defaultChecked /> Recordar</label>
               <button className="btn primary sm">Asignar</button>
             </form>
             <form action={deleteCall.bind(null, c.id)}><button className="btn ghost sm" title="Por ejemplo, una llamada interna o de venta">Descartar</button></form>
           </li>
-        ))}
+          );
+        })}
         {!inbox.length && <li className="empty">No hay llamadas esperando cliente.</li>}
       </ul>
 
@@ -43,10 +52,10 @@ export default async function Meetings() {
       <ul className="list panel">
         {recent.filter((c) => c.org).map((c) => (
           <li key={c.id}>
-            <Link href={`/panel/clientes/${c.org!.slug}/llamadas`} className="list-row">
+            <Link href={c.org!.kind === 'agency' ? '/panel/laboratorio?v=equipo' : `/panel/clientes/${c.org!.slug}/llamadas`} className="list-row">
               <div className="grow">
                 <div style={{ fontWeight: 500 }}>{c.title}</div>
-                <div className="muted small">{c.org!.name} · {fmtDate(c.held_at)}</div>
+                <div className="muted small">{c.org!.kind === 'agency' ? `Equipo · ${teamLabel(c.team_kind)}` : c.org!.name} · {fmtDate(c.held_at)}</div>
               </div>
               <span className={`tag ${c.status === 'procesada' ? 'ok' : c.status === 'error' ? 'warn' : ''}`}>
                 {c.status === 'procesada' ? 'Procesada' : c.status === 'error' ? 'Error' : 'Procesando'}

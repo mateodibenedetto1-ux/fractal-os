@@ -247,16 +247,38 @@ export async function assignCall(form: FormData) {
   await requireStaff();
   const sb = await supabaseServer();
   const callId = str(form, 'call_id')!;
-  const orgId = str(form, 'org_id');
-  if (!orgId) return;
-  await sb.from('calls').update({ org_id: orgId }).eq('id', callId);
+  const target = str(form, 'org_id');
+  if (!target) return;
+
+  // "team:daily", "team:creativity"… → reunión interna, va al equipo (org agency)
+  let orgId = target;
+  let teamKind: string | null = null;
+  if (target.startsWith('team:')) {
+    const { data: agency } = await sb.from('organizations').select('id').eq('kind', 'agency').single();
+    if (!agency) throw new Error('No encontré la organización del equipo');
+    orgId = agency.id;
+    teamKind = target.slice(5) || 'equipo';
+  }
+  await sb.from('calls').update({ org_id: orgId, team_kind: teamKind }).eq('id', callId);
+
   if (form.get('remember') === 'on') {
-    const { data: call } = await sb.from('calls').select('invitee_emails').eq('id', callId).single();
-    const { data: org } = await sb.from('organizations').select('email_domains').eq('id', orgId).single();
-    const add = (call?.invitee_emails ?? []).map((e: string) => e.split('@')[1]).filter((d: string) => d && !/gmail|hotmail|outlook|yahoo|icloud/.test(d));
-    const personal = (call?.invitee_emails ?? []).filter((e: string) => /gmail|hotmail|outlook|yahoo|icloud/.test(e));
-    const next = Array.from(new Set([...(org?.email_domains ?? []), ...add, ...personal]));
-    await sb.from('organizations').update({ email_domains: next }).eq('id', orgId);
+    const { data: call } = await sb.from('calls').select('title, invitee_emails').eq('id', callId).single();
+    const { data: org } = await sb.from('organizations').select('email_domains, team_titles').eq('id', orgId).single();
+    const patch: Record<string, unknown> = {};
+    if (teamKind) {
+      // En el equipo se recuerda el título (ej. "daily nacho") y los emails personales, no dominios enteros
+      const { titleKey } = await import('./team');
+      const key = titleKey(call?.title ?? '');
+      const rules = ((org?.team_titles ?? []) as { pattern: string; kind: string }[]).filter((r) => r.pattern !== key);
+      if (key.length >= 4) patch.team_titles = [...rules, { pattern: key, kind: teamKind }];
+      const personal = (call?.invitee_emails ?? []).map((e: string) => e.toLowerCase());
+      if (personal.length) patch.email_domains = Array.from(new Set([...(org?.email_domains ?? []), ...personal]));
+    } else {
+      const add = (call?.invitee_emails ?? []).map((e: string) => e.split('@')[1]).filter((d: string) => d && !/gmail|hotmail|outlook|yahoo|icloud/.test(d));
+      const personal = (call?.invitee_emails ?? []).filter((e: string) => /gmail|hotmail|outlook|yahoo|icloud/.test(e));
+      patch.email_domains = Array.from(new Set([...(org?.email_domains ?? []), ...add, ...personal]));
+    }
+    if (Object.keys(patch).length) await sb.from('organizations').update(patch).eq('id', orgId);
   }
   await materializeCall(sb, callId);
   refresh();

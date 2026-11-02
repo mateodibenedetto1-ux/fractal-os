@@ -4,12 +4,33 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { linksIn, transcriptToText, type FathomMeeting } from './fathom';
 import type { Org, ResourceKind } from './types';
 import { pushActionToNotion } from './sync';
+import { NOTION_DB, createRow, hasNotion } from './notion';
+import { teamLabel } from './team';
 
 export interface Extraction {
   summary_md: string;
   actions: { title: string; why?: string; area?: string; priority?: 'critica' | 'alta' | 'media' | 'baja'; owner?: 'cliente' | 'fractal'; responsable?: string; due_date?: string; subtasks?: string[] }[];
   resources: { title: string; url: string }[];
+  learnings?: { title: string; tipo: string; area?: string; notas?: string }[];
 }
+
+const TEAM_SYSTEM = `Sos el asistente operativo de Fractal, una agencia de contenido y consultora de crecimiento.
+Recibís el transcript de una reunión INTERNA del equipo de Fractal (no hay cliente presente).
+Tu trabajo es dejar al equipo con claridad sobre qué hacer y capturar lo que aprendimos para el Laboratorio.
+
+Reglas:
+- Escribí en español neutro y claro, sin muletillas.
+- summary_md: Markdown con "## Temas", "## Decisiones", "## Accionables" (lista breve) y "## Aprendizajes". Conciso.
+- actions: tareas concretas y verificables. Título con verbo, menos de 90 caracteres. owner siempre "fractal".
+  Si una tarea es de un cliente puntual, empezá el título con el nombre del cliente y dos puntos (ej: "Val: subir reel").
+  responsable: si te paso la lista de responsables posibles, elegí exactamente uno de esos nombres.
+  due_date: AAAA-MM-DD solo si se acordó un plazo concreto; calculalo desde la fecha de la reunión.
+  area: una de Marketing, Contenido, Comercial, Operaciones, Adquisición, Producto, Branding, Métricas, General.
+- learnings: lo que vale la pena guardar en el Laboratorio del equipo (máximo 6, solo lo relevante, no repitas tareas).
+  tipo: Falla (algo salió mal y tuvo costo), Aprendizaje (qué haríamos distinto), Feedback (lo que dijo alguien sin filtrar),
+  Experimento (algo a probar con resultado a medir), Hipótesis (explicación a validar), Decisión (criterio acordado), SOP (proceso a estandarizar).
+  title: una frase clara de menos de 100 caracteres. notas: contexto breve (qué pasó, por qué importa, cliente si aplica).
+- resources: documentos o links compartidos con su URL. No inventes URLs.`;
 
 const SYSTEM = `Sos el asistente operativo de Fractal, una consultora de crecimiento.
 Recibís el transcript de una llamada 1 a 1 entre el equipo de Fractal y un cliente.
@@ -51,6 +72,19 @@ const TOOL: Anthropic.Tool = {
           required: ['title'],
         },
       },
+      learnings: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            tipo: { type: 'string', enum: ['Falla', 'Aprendizaje', 'Feedback', 'Experimento', 'Hipótesis', 'Decisión', 'SOP'] },
+            area: { type: 'string' },
+            notas: { type: 'string' },
+          },
+          required: ['title', 'tipo'],
+        },
+      },
       resources: {
         type: 'array',
         items: { type: 'object', properties: { title: { type: 'string' }, url: { type: 'string' } }, required: ['title', 'url'] },
@@ -61,7 +95,7 @@ const TOOL: Anthropic.Tool = {
 };
 
 /** Usa Claude si hay API key; si no, cae a lo que manda Fathom. */
-export async function extract(input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string; fathomSummary?: string | null; fathomActions?: FathomMeeting['action_items'] }): Promise<Extraction> {
+export async function extract(input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string; team?: string; fathomSummary?: string | null; fathomActions?: FathomMeeting['action_items'] }): Promise<Extraction> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (key && input.transcript.trim()) {
     try {
@@ -80,18 +114,18 @@ export async function extract(input: { title: string; clientName?: string; heldA
   };
 }
 
-async function extractWithClaude(key: string, input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string }): Promise<Extraction> {
+async function extractWithClaude(key: string, input: { title: string; clientName?: string; heldAt?: string; responsables?: string[]; transcript: string; team?: string }): Promise<Extraction> {
   {
     const client = new Anthropic({ apiKey: key });
     const msg = await client.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
       max_tokens: 8000,
-      system: SYSTEM,
+      system: input.team ? TEAM_SYSTEM : SYSTEM,
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL.name },
       messages: [{
         role: 'user',
-        content: `Llamada: ${input.title}\nCliente: ${input.clientName ?? 'sin asignar'}\nFecha de la llamada: ${input.heldAt?.slice(0, 10) ?? 'desconocida'}${input.responsables?.length ? `\nResponsables posibles: ${input.responsables.join(', ')}` : ''}\n\n<transcript>\n${input.transcript}\n</transcript>`,
+        content: `Llamada: ${input.title}\n${input.team ? `Reunión interna del equipo · ${input.team}` : `Cliente: ${input.clientName ?? 'sin asignar'}`}\nFecha de la llamada: ${input.heldAt?.slice(0, 10) ?? 'desconocida'}${input.responsables?.length ? `\nResponsables posibles: ${input.responsables.join(', ')}` : ''}\n\n<transcript>\n${input.transcript}\n</transcript>`,
       }],
     });
     const block = msg.content.find((b) => b.type === 'tool_use');
@@ -156,7 +190,8 @@ export function matchOrg(orgs: Pick<Org, 'id' | 'email_domains' | 'contact_email
 export async function materializeCall(sb: SupabaseClient, callId: string) {
   const { data: call } = await sb.from('calls').select('*').eq('id', callId).single();
   if (!call?.org_id) return { ok: false, reason: 'sin_cliente' as const };
-  const { data: org } = await sb.from('organizations').select('name, responsables').eq('id', call.org_id).single();
+  const { data: org } = await sb.from('organizations').select('name, kind, responsables').eq('id', call.org_id).single();
+  const team = org?.kind === 'agency' ? teamLabel(call.team_kind) : undefined;
   const responsables = ((org?.responsables ?? []) as { name: string; side: 'cliente' | 'fractal'; aliases?: string[] }[]);
   const findResp = (name?: string) => {
     if (!name) return undefined;
@@ -174,6 +209,7 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
       heldAt: call.held_at,
       responsables: responsables.map((r) => r.name),
       transcript,
+      team,
       fathomSummary: raw.default_summary?.markdown_formatted ?? call.summary_md,
       fathomActions: raw.action_items,
     });
@@ -219,11 +255,50 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
     // Respaldo en la base de tareas del cliente en Notion
     for (const id of created) await pushActionToNotion(sb, id);
 
+    // Reunión del equipo: lo aprendido va al Laboratorio (y al Atlas de Notion). No se duplica al regenerar.
+    if (team && ex.learnings?.length) await saveTeamLearnings(sb, call, team, ex.learnings);
+
     await sb.from('calls').update({ status: 'procesada', summary_md: ex.summary_md, error: null }).eq('id', callId);
     return { ok: true as const, actions: ex.actions.length };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await sb.from('calls').update({ status: 'error', error: message }).eq('id', callId);
     return { ok: false as const, reason: message };
+  }
+}
+
+const LAB_TIPOS = ['Falla', 'Aprendizaje', 'Feedback', 'Experimento', 'Hipótesis', 'Decisión', 'SOP'];
+
+async function saveTeamLearnings(
+  sb: SupabaseClient,
+  call: { id: string; title: string; held_at: string; share_url: string | null },
+  team: string,
+  learnings: NonNullable<Extraction['learnings']>,
+) {
+  const { count } = await sb.from('lab_entries').select('id', { count: 'exact', head: true }).eq('call_id', call.id);
+  if (count) return;
+  const fecha = call.held_at.slice(0, 10);
+  const rows = learnings.slice(0, 6).map((l) => ({
+    title: l.title.slice(0, 200),
+    tipo: LAB_TIPOS.includes(l.tipo) ? l.tipo : 'Aprendizaje',
+    area: l.area ?? null,
+    estado: 'Capturado',
+    cliente: 'Equipo',
+    fecha,
+    fuente: `Reunión ${team}: ${call.title}`,
+    notas: [l.notas, call.share_url ? `Grabación: ${call.share_url}` : null].filter(Boolean).join('\n'),
+    call_id: call.id,
+  }));
+  const { data } = await sb.from('lab_entries').insert(rows).select('id, title, tipo, area, estado, cliente, fecha, fuente, notas');
+  if (!hasNotion() || !data) return;
+  for (const r of data) {
+    try {
+      const notionId = await createRow(NOTION_DB.atlas, {
+        Registro: r.title, Tipo: r.tipo, 'Área': r.area, Estado: r.estado, Cliente: r.cliente, Fecha: r.fecha, Fuente: r.fuente, Notas: r.notas,
+      });
+      await sb.from('lab_entries').update({ notion_id: notionId }).eq('id', r.id);
+    } catch (e) {
+      console.error('No se pudo guardar en el Atlas de Notion', e);
+    }
   }
 }

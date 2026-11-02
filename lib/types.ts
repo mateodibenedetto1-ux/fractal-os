@@ -50,6 +50,8 @@ export interface Call {
   share_url: string | null;
   summary_md: string | null;
   invitee_emails: string[];
+  /** Reunión interna del equipo: daily, creativity, editores, equipo. Null si es de un cliente. */
+  team_kind?: string | null;
   status: 'pendiente' | 'procesada' | 'error';
   error: string | null;
   created_at: string;

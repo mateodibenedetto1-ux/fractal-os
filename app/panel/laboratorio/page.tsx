@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import { getKbDocs, getLabEntries, getLabPages } from '@/lib/data';
+import { getKbDocs, getLabEntries, getLabPages, getTeamCalls } from '@/lib/data';
+import { marked } from 'marked';
+import { TEAM_KINDS, teamLabel } from '@/lib/team';
+import { fmtDate } from '@/lib/format';
+import { reprocessCall } from '@/lib/actions';
 import { MODULES } from '@/lib/brain';
 import { addLabEntry, syncAtlasNow } from '@/lib/actions';
 import { METHOD, TIPOS, TIPO_HELP, TIPO_PLURAL, VAULT_LINKS } from '@/lib/lab-content';
@@ -11,13 +15,18 @@ const TABS = [
   { k: 'resumen', l: 'Resumen' },
   { k: 'atlas', l: 'Atlas' },
   { k: 'clientes', l: 'Por cliente' },
+  { k: 'equipo', l: 'Equipo' },
   { k: 'criterios', l: 'Criterios y archivo' },
   { k: 'conocimiento', l: 'Conocimiento' },
 ];
 
-export default async function Lab({ searchParams }: { searchParams: Promise<{ v?: string; tipo?: string }> }) {
-  const { v = 'resumen', tipo } = await searchParams;
-  const [entries, pages, kb] = await Promise.all([getLabEntries(), getLabPages(), v === 'conocimiento' ? getKbDocs() : Promise.resolve([])]);
+export default async function Lab({ searchParams }: { searchParams: Promise<{ v?: string; tipo?: string; k?: string }> }) {
+  const { v = 'resumen', tipo, k: teamK } = await searchParams;
+  const [entries, pages, kb, teamCalls] = await Promise.all([
+    getLabEntries(), getLabPages(),
+    v === 'conocimiento' ? getKbDocs() : Promise.resolve([]),
+    v === 'equipo' ? getTeamCalls(60) : Promise.resolve([]),
+  ]);
   const CLIENT_CASES = pages.filter((p) => p.section === 'cliente');
   const CRITERIA = pages.filter((p) => p.section === 'criterio');
   const open = entries.filter((e) => e.estado !== 'Validado' && e.estado !== 'Archivado');
@@ -28,7 +37,7 @@ export default async function Lab({ searchParams }: { searchParams: Promise<{ v?
       <div className="page-head">
         <div>
           <h1>Laboratorio</h1>
-          <p>Aprender de cada cliente y convertirlo en mejores sistemas.</p>
+          <p>Aprender de cada cliente y del equipo, y convertirlo en mejores sistemas.</p>
         </div>
         <form action={syncAtlasNow}><button className="btn">Traer cambios de Notion</button></form>
       </div>
@@ -184,6 +193,56 @@ export default async function Lab({ searchParams }: { searchParams: Promise<{ v?
           </div>
         </div>
       )}
+
+      {v === 'equipo' && (() => {
+        const teamEntries = entries.filter((e) => e.cliente === 'Equipo');
+        const calls = teamK ? teamCalls.filter((c) => (c.team_kind ?? 'equipo') === teamK) : teamCalls;
+        return (
+          <div className="stack" style={{ gap: 26 }}>
+            <p className="muted small" style={{ maxWidth: '72ch' }}>
+              Lo que sale de las reuniones internas: dailies, Creativity Core, llamadas con editores y del equipo. Cada reunión que asignás a Equipo en Reuniones genera su resumen, las tareas van al Tracker Fractal y lo aprendido queda acá y en el Atlas.
+            </p>
+
+            <section>
+              <h2 className="section-title">Aprendizajes del equipo · {teamEntries.length}</h2>
+              {teamEntries.length ? <AtlasTable entries={teamEntries} /> : <div className="panel empty">Todavía no hay aprendizajes de reuniones del equipo. Aparecen solos cuando asignás una reunión a Equipo.</div>}
+            </section>
+
+            <section>
+              <div className="row between" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                <h2 className="section-title" style={{ margin: 0 }}>Reuniones · {calls.length}</h2>
+                <div className="chips">
+                  <Link href="/panel/laboratorio?v=equipo" className={`chip ${!teamK ? 'on' : ''}`}>Todas</Link>
+                  {TEAM_KINDS.map((t) => (
+                    <Link key={t.k} href={`/panel/laboratorio?v=equipo&k=${t.k}`} className={`chip ${teamK === t.k ? 'on' : ''}`}>
+                      {t.l} · {teamCalls.filter((c) => (c.team_kind ?? 'equipo') === t.k).length}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+              <div className="stack" style={{ gap: 10 }}>
+                {!calls.length && <div className="panel empty">No hay reuniones de este tipo todavía.</div>}
+                {calls.map((c) => (
+                  <details key={c.id} className="panel panel-pad disclose">
+                    <summary className="row between" style={{ gap: 10 }}>
+                      <div className="grow">
+                        <div style={{ fontWeight: 500 }}>{c.title}</div>
+                        <div className="muted small">{teamLabel(c.team_kind)} · {fmtDate(c.held_at)}{c.status !== 'procesada' ? ` · ${c.status === 'error' ? 'Error al procesar' : 'Procesando'}` : ''}</div>
+                      </div>
+                      <span className="btn sm">Ver resumen</span>
+                    </summary>
+                    <div className="ai-md" style={{ marginTop: 14 }} dangerouslySetInnerHTML={{ __html: marked.parse((c.summary_md ?? '_Sin resumen todavía._').replace(/<[^>]+>/g, ''), { async: false }) as string }} />
+                    <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                      {c.share_url && <a className="btn sm" href={c.share_url} target="_blank" rel="noopener noreferrer">Grabación</a>}
+                      <form action={reprocessCall.bind(null, c.id)}><button className="btn sm ghost" title="Vuelve a generar resumen y tareas">Regenerar</button></form>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </section>
+          </div>
+        );
+      })()}
 
       {v === 'criterios' && (
         <ul className="list panel">

@@ -156,13 +156,13 @@ export async function getInbox(): Promise<Call[]> {
   const sb = await supabaseServer();
   const { data } = await sb
     .from('calls')
-    .select('id, org_id, title, held_at, source, recording_id, fathom_url, share_url, summary_md, invitee_emails, status, error, created_at')
+    .select('id, org_id, title, held_at, source, recording_id, fathom_url, share_url, summary_md, invitee_emails, team_kind, status, error, created_at')
     .is('org_id', null)
     .order('held_at', { ascending: false });
   return (data ?? []) as Call[];
 }
 
-export async function getRecentCalls(limit = 8): Promise<(Call & { org: Pick<Org, 'name' | 'slug'> | null })[]> {
+export async function getRecentCalls(limit = 8): Promise<(Call & { org: Pick<Org, 'name' | 'slug' | 'kind'> | null })[]> {
   if (DEMO) {
     return [...demo.demoCalls]
       .sort((a, b) => b.held_at.localeCompare(a.held_at))
@@ -172,10 +172,10 @@ export async function getRecentCalls(limit = 8): Promise<(Call & { org: Pick<Org
   const sb = await supabaseServer();
   const { data } = await sb
     .from('calls')
-    .select('id, org_id, title, held_at, source, fathom_url, share_url, status, invitee_emails, org:organizations(name, slug)')
+    .select('id, org_id, title, held_at, source, fathom_url, share_url, status, invitee_emails, team_kind, org:organizations(name, slug, kind)')
     .order('held_at', { ascending: false })
     .limit(limit);
-  return (data ?? []) as unknown as (Call & { org: Pick<Org, 'name' | 'slug'> | null })[];
+  return (data ?? []) as unknown as (Call & { org: Pick<Org, 'name' | 'slug' | 'kind'> | null })[];
 }
 
 export async function getResources(orgId: string): Promise<Resource[]> {
@@ -283,4 +283,19 @@ export async function getKbDoc(id: string): Promise<(KbDoc & { content: string |
   const sb = await supabaseServer();
   const { data } = await sb.from('kb_documents').select('*').eq('id', id).maybeSingle();
   return data as (KbDoc & { content: string | null }) | null;
+}
+
+// ---------- Reuniones del equipo ----------
+
+export interface TeamCall { id: string; title: string; held_at: string; team_kind: string | null; status: string; share_url: string | null; summary_md: string | null }
+
+export async function getTeamCalls(limit = 40): Promise<TeamCall[]> {
+  if (DEMO) return [];
+  const agency = await getAgency();
+  if (!agency) return [];
+  const sb = await supabaseServer();
+  const { data } = await sb.from('calls')
+    .select('id, title, held_at, team_kind, status, share_url, summary_md')
+    .eq('org_id', agency.id).order('held_at', { ascending: false }).limit(limit);
+  return (data ?? []) as TeamCall[];
 }

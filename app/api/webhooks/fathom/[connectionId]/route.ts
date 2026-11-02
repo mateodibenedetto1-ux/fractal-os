@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { externalEmails, verifyFathomSignature, type FathomMeeting } from '@/lib/fathom';
 import { matchOrg, materializeCall } from '@/lib/process';
+import { matchTeamRule, type TeamTitleRule } from '@/lib/team';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -31,10 +32,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ connectionId: 
 
   const emails = externalEmails(m);
   const { data: orgs } = await sb.from('organizations').select('id, email_domains, contact_email').eq('kind', 'client');
-  const orgId = matchOrg(orgs ?? [], emails);
+  let orgId = matchOrg(orgs ?? [], emails);
+  let teamKind: string | null = null;
+  if (!orgId) {
+    // Reuniones internas: por título recordado (ej. "Daily Nacho") o por email de alguien del equipo
+    const { data: agency } = await sb.from('organizations').select('id, email_domains, contact_email, team_titles').eq('kind', 'agency').maybeSingle();
+    if (agency) {
+      const byTitle = matchTeamRule((agency.team_titles ?? []) as TeamTitleRule[], m.meeting_title || m.title || '');
+      if (byTitle || (emails.length && matchOrg([{ ...agency, contact_email: null }], emails))) {
+        orgId = agency.id;
+        teamKind = byTitle ?? 'equipo';
+      }
+    }
+  }
 
   const { data: call, error } = await sb.from('calls').upsert({
     org_id: orgId,
+    team_kind: teamKind,
     title: m.meeting_title || m.title,
     held_at: m.recording_start_time || m.scheduled_start_time || m.created_at,
     source: 'fathom',
