@@ -580,3 +580,4 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
   .brain-mod-title { display: none; }
   .journey-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+.kb-text { white-space: pre-wrap; line-height: 1.65; font-size: 14.5px; max-width: 80ch; }

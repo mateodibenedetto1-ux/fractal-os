@@ -264,3 +264,23 @@ export async function getLabPages(): Promise<import('./types').LabPage[]> {
   const { data } = await sb.from('lab_pages').select('*').order('position');
   return (data ?? []) as import('./types').LabPage[];
 }
+
+export interface KbDoc {
+  id: string; source_id: string; title: string; category: string | null; module: string | null; source_url: string | null;
+  kind: string | null; chars: number; summary: string | null; status: string; note: string | null; updated_at: string;
+}
+
+/** Base de Conocimiento (sin el texto completo, para listar). */
+export async function getKbDocs(): Promise<KbDoc[]> {
+  if (DEMO) return [];
+  const sb = await supabaseServer();
+  const { data } = await sb.from('kb_documents').select('id, source_id, title, category, module, source_url, kind, chars, summary, status, note, updated_at').order('category').order('title');
+  return (data ?? []) as KbDoc[];
+}
+
+export async function getKbDoc(id: string): Promise<(KbDoc & { content: string | null }) | null> {
+  if (DEMO) return null;
+  const sb = await supabaseServer();
+  const { data } = await sb.from('kb_documents').select('*').eq('id', id).maybeSingle();
+  return data as (KbDoc & { content: string | null }) | null;
+}

@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { getLabEntries, getLabPages } from '@/lib/data';
+import { getKbDocs, getLabEntries, getLabPages } from '@/lib/data';
+import { MODULES } from '@/lib/brain';
 import { addLabEntry, syncAtlasNow } from '@/lib/actions';
 import { METHOD, TIPOS, TIPO_HELP, TIPO_PLURAL, VAULT_LINKS } from '@/lib/lab-content';
 import { AtlasTable } from '@/components/AtlasTable';
@@ -11,11 +12,12 @@ const TABS = [
   { k: 'atlas', l: 'Atlas' },
   { k: 'clientes', l: 'Por cliente' },
   { k: 'criterios', l: 'Criterios y archivo' },
+  { k: 'conocimiento', l: 'Conocimiento' },
 ];
 
 export default async function Lab({ searchParams }: { searchParams: Promise<{ v?: string; tipo?: string }> }) {
   const { v = 'resumen', tipo } = await searchParams;
-  const [entries, pages] = await Promise.all([getLabEntries(), getLabPages()]);
+  const [entries, pages, kb] = await Promise.all([getLabEntries(), getLabPages(), v === 'conocimiento' ? getKbDocs() : Promise.resolve([])]);
   const CLIENT_CASES = pages.filter((p) => p.section === 'cliente');
   const CRITERIA = pages.filter((p) => p.section === 'criterio');
   const open = entries.filter((e) => e.estado !== 'Validado' && e.estado !== 'Archivado');
@@ -36,6 +38,38 @@ export default async function Lab({ searchParams }: { searchParams: Promise<{ v?
           <Link key={t.k} href={`/panel/laboratorio?v=${t.k}`} aria-current={v === t.k ? 'page' : undefined}>{t.l}</Link>
         ))}
       </nav>
+
+      {v === 'conocimiento' && (
+        <div className="stack" style={{ gap: 22 }}>
+          <p className="muted" style={{ maxWidth: '68ch' }}>
+            La bóveda de documentos de Fractal: SOPs, setting, closing y ofertas. La IA de Fractal la consulta antes de responder. Solo la ve el equipo.
+          </p>
+          {kb.length === 0 && <div className="panel empty">Todavía no hay documentos cargados.</div>}
+          {Array.from(new Set(kb.map((d) => d.category ?? 'Otros'))).map((cat) => {
+            const list = kb.filter((d) => (d.category ?? 'Otros') === cat);
+            return (
+              <section key={cat}>
+                <h2 className="section-title">{cat} · {list.length}</h2>
+                <ul className="list panel">
+                  {list.map((d) => (
+                    <li key={d.id}>
+                      <Link href={`/panel/laboratorio/kb/${d.id}`} className="list-row">
+                        <div className="grow" style={{ minWidth: 0 }}>
+                          <div>{d.title}</div>
+                          <div className="muted small">
+                            {[MODULES.find((m) => m.k === d.module)?.title && `Módulo ${MODULES.find((m) => m.k === d.module)!.n} · ${MODULES.find((m) => m.k === d.module)!.title}`, d.kind, d.chars ? `${Math.round(d.chars / 1000)}k caracteres` : null].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                        {d.status !== 'ok' && <span className="tag warn">{d.status === 'sin_acceso' ? 'Sin acceso' : 'Sin texto'}</span>}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       {v === 'resumen' && (
         <div className="stack" style={{ gap: 28 }}>
