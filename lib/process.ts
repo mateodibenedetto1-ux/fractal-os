@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { linksIn, transcriptToText, type FathomMeeting } from './fathom';
 import type { Org, ResourceKind } from './types';
 import { pushActionToNotion } from './sync';
-import { NOTION_DB, createRow, hasNotion } from './notion';
+import { NOTION_DB, createRow, hasNotion, notionApi } from './notion';
 import { teamLabel } from './team';
 
 export interface Extraction {
@@ -219,7 +219,10 @@ export async function materializeCall(sb: SupabaseClient, callId: string) {
       fathomActions: raw.action_items,
     });
 
-    // Limpia lo generado antes por esta llamada (re-procesar no duplica)
+    // Limpia lo generado antes por esta llamada (re-procesar no duplica). Las copias en Notion se archivan
+    // para que la sincronización no las vuelva a traer.
+    const { data: old } = await sb.from('action_items').select('notion_id').eq('call_id', callId).in('source', ['fathom', 'ia']).not('notion_id', 'is', null);
+    for (const o of old ?? []) await notionApi(`pages/${String(o.notion_id).replace(/-/g, '')}`, { method: 'PATCH', body: { archived: true } }).catch(() => undefined);
     await sb.from('action_items').delete().eq('call_id', callId).in('source', ['fathom', 'ia']);
     await sb.from('documents').delete().eq('call_id', callId).eq('kind', 'resumen');
 
