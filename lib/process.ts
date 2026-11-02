@@ -125,9 +125,10 @@ async function extractWithClaude(key: string, input: { title: string; clientName
     const msg = await client.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
       max_tokens: 8000,
-      system: input.team ? TEAM_SYSTEM : SYSTEM,
+      system: `${input.team ? TEAM_SYSTEM : SYSTEM}\n\nRespondé únicamente llamando a la herramienta ${TOOL.name}, sin texto aparte.`,
       tools: [TOOL],
-      tool_choice: { type: 'tool', name: TOOL.name },
+      // Los modelos actuales no aceptan forzar la herramienta: va en auto y la instrucción lo pide.
+      tool_choice: { type: 'auto' },
       messages: [{
         role: 'user',
         content: `Llamada: ${input.title}\n${input.team ? `Reunión interna del equipo · ${input.team}` : `Cliente: ${input.clientName ?? 'sin asignar'}`}\nFecha de la llamada: ${input.heldAt?.slice(0, 10) ?? 'desconocida'}${input.responsables?.length ? `\nResponsables posibles: ${input.responsables.join(', ')}` : ''}\n\n<transcript>\n${input.transcript}\n</transcript>`,
