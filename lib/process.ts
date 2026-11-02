@@ -344,3 +344,22 @@ async function saveTeamCallToNotion(
   const blocks = mdToBlocks(ex.summary_md);
   if (blocks.length) await notionApi(`blocks/${pageId}/children`, { method: 'PATCH', body: { children: blocks } });
 }
+
+/** Pasa a "Llamadas del equipo" (Notion) las reuniones del equipo que todavía no están ahí. */
+export async function backfillTeamCalls(sb: SupabaseClient) {
+  if (!hasNotion()) return 0;
+  const { data: agency } = await sb.from('organizations').select('id').eq('kind', 'agency').maybeSingle();
+  if (!agency) return 0;
+  const { data: calls } = await sb.from('calls').select('id, title, held_at, share_url, notion_page, team_kind, summary_md')
+    .eq('org_id', agency.id).eq('status', 'procesada').is('notion_page', null).limit(20);
+  let n = 0;
+  for (const c of calls ?? []) {
+    const [{ count: tasks }, { count: labs }] = await Promise.all([
+      sb.from('action_items').select('id', { count: 'exact', head: true }).eq('call_id', c.id).is('parent_id', null),
+      sb.from('lab_entries').select('id', { count: 'exact', head: true }).eq('call_id', c.id),
+    ]);
+    const ex = { summary_md: c.summary_md ?? '', actions: [], resources: [], learnings: Array(labs ?? 0).fill({ title: '', tipo: '' }) } as Extraction;
+    await saveTeamCallToNotion(sb, c, teamLabel(c.team_kind), ex, tasks ?? 0).then(() => n++).catch((e) => console.error('Llamada a Notion', c.id, e));
+  }
+  return n;
+}

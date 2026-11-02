@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { pushDirtyActions, syncAtlasFromNotion, syncOrgFromNotion } from '@/lib/sync';
+import { backfillTeamCalls } from '@/lib/process';
 import type { Org } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -27,5 +28,6 @@ export async function GET(req: Request) {
     if (o.notion_tasks_db || o.notion_roadmap_db) clients.push(await syncOrgFromNotion(sb, o));
   }
   const atlas = await syncAtlasFromNotion(sb);
-  return NextResponse.json({ ok: true, pushed, clients, atlas });
+  const teamCalls = await backfillTeamCalls(sb);
+  return NextResponse.json({ ok: true, pushed, clients, atlas, teamCalls });
 }

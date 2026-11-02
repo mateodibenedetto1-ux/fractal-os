@@ -404,7 +404,10 @@ export async function syncClientNow(orgId: string) {
 export async function syncAtlasNow() {
   if (DEMO) return;
   await requireStaff();
-  await syncAtlasFromNotion(supabaseAdmin());
+  const sb = supabaseAdmin();
+  await syncAtlasFromNotion(sb);
+  const { backfillTeamCalls } = await import('./process');
+  await backfillTeamCalls(sb);
   refresh();
 }
 
