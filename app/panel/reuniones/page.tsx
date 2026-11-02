@@ -2,7 +2,7 @@ import { getInbox, getRecentCalls, listClients } from '@/lib/data';
 import { assignCall, deleteCall } from '@/lib/actions';
 import { fmtDate } from '@/lib/format';
 import Link from 'next/link';
-import { TEAM_KINDS, guessTeamKind, teamLabel } from '@/lib/team';
+import { TEAM_KINDS, guessTeamKind, matchClientByTitle, teamLabel } from '@/lib/team';
 
 export const metadata = { title: 'Reuniones' };
 
@@ -20,7 +20,8 @@ export default async function Meetings() {
       <h2 className="section-title">Sin asignar · {inbox.length}</h2>
       <ul className="list panel" style={{ marginBottom: 30 }}>
         {inbox.map((c) => {
-          const guess = guessTeamKind(c.title);
+          const client = matchClientByTitle(clients, c.title);
+          const guess = client ? null : guessTeamKind(c.title);
           return (
           <li key={c.id} className="list-row wrap">
             <div className="grow" style={{ minWidth: 220 }}>
@@ -29,7 +30,7 @@ export default async function Meetings() {
             </div>
             <form action={assignCall} className="row wrap">
               <input type="hidden" name="call_id" value={c.id} />
-              <select className="select" name="org_id" required defaultValue={guess ? `team:${guess}` : ''} style={{ width: 220 }} aria-label="Cliente o equipo">
+              <select className="select" name="org_id" required defaultValue={client ?? (guess ? `team:${guess}` : '')} style={{ width: 220 }} aria-label="Cliente o equipo">
                 <option value="" disabled>Elegir cliente o equipo</option>
                 <optgroup label="Equipo Fractal">
                   {TEAM_KINDS.map((t) => <option key={t.k} value={`team:${t.k}`}>Equipo · {t.l}</option>)}

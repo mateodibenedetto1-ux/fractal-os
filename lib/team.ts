@@ -30,3 +30,17 @@ export function matchTeamRule(rules: TeamTitleRule[], title: string): TeamKind |
   const t = titleKey(title);
   return rules.find((r) => r.pattern && t.includes(r.pattern))?.kind ?? null;
 }
+
+/** Cliente cuyo nombre (o el de alguien de su lado, con alias) aparece en el título: "Daily Marce" → BRAINZEED. */
+export function matchClientByTitle(
+  orgs: { id: string; name: string; responsables?: { name: string; side: string; aliases?: string[] }[] | null }[],
+  title: string,
+): string | null {
+  const t = ` ${titleKey(title)} `;
+  for (const o of orgs) {
+    const names = [o.name, ...(o.responsables ?? []).filter((r) => r.side === 'cliente').flatMap((r) => [r.name, ...(r.aliases ?? [])])]
+      .map((n) => titleKey(n)).filter((n) => n.length >= 4);
+    if (names.some((n) => t.includes(` ${n} `) || t.includes(` ${n.split(' ')[0]} `))) return o.id;
+  }
+  return null;
+}

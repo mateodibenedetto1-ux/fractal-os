@@ -3,7 +3,7 @@ import { after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { externalEmails, verifyFathomSignature, type FathomMeeting } from '@/lib/fathom';
 import { matchOrg, materializeCall } from '@/lib/process';
-import { guessTeamKind, matchTeamRule, type TeamTitleRule } from '@/lib/team';
+import { guessTeamKind, matchClientByTitle, matchTeamRule, type TeamTitleRule } from '@/lib/team';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -31,8 +31,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ connectionId: 
   }
 
   const emails = externalEmails(m);
-  const { data: orgs } = await sb.from('organizations').select('id, email_domains, contact_email').eq('kind', 'client');
-  let orgId = matchOrg(orgs ?? [], emails);
+  const { data: orgs } = await sb.from('organizations').select('id, name, responsables, email_domains, contact_email').eq('kind', 'client');
+  // Primero por email; si no, por el nombre del cliente en el título ("Daily Marce")
+  let orgId = matchOrg(orgs ?? [], emails) ?? matchClientByTitle(orgs ?? [], m.meeting_title || m.title || '');
   let teamKind: string | null = null;
   if (!orgId) {
     // Reuniones internas: por título recordado (ej. "Daily Nacho") o por email de alguien del equipo
