@@ -519,6 +519,20 @@ export async function saveBrain(orgId: string, patch: Record<string, string>) {
     await supabaseAdmin().from('action_items').update({ done: true })
       .eq('org_id', orgId).eq('done', false).eq('source', 'recorrido').like('title', 'Completar%').in('brain_section', ready);
   }
+  // Al completar el Segundo cerebro se crea el roadmap personalizado (una sola vez; después se regenera a mano)
+  const { brainPct } = await import('./brain');
+  const { ROADMAP_THRESHOLD, generateRoadmap } = await import('./roadmap-ai');
+  if (brainPct(data) >= ROADMAP_THRESHOLD) {
+    const admin = supabaseAdmin();
+    const [{ data: meta }, { data: org }] = await Promise.all([
+      admin.from('client_brain').select('roadmap_status').eq('org_id', orgId).single(),
+      admin.from('organizations').select('segment').eq('id', orgId).single(),
+    ]);
+    if (org?.segment === 'consulting' && !meta?.roadmap_status) {
+      await admin.from('client_brain').update({ roadmap_status: 'generando' }).eq('org_id', orgId);
+      after(() => generateRoadmap(orgId).then(() => undefined));
+    }
+  }
 }
 
 /** Crea el Recorrido Fractal de un cliente de Consulting: una fase por módulo del curso y sus tareas. */

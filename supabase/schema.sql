@@ -413,3 +413,11 @@ alter table ai_keys enable row level security;
 alter table calls add column if not exists team_kind text;
 alter table lab_entries add column if not exists call_id uuid references calls(id) on delete set null;
 alter table organizations add column if not exists team_titles jsonb not null default '[]'::jsonb;
+
+-- 009: roadmap personalizado con IA cuando el cliente completa su Segundo cerebro
+alter table client_brain add column if not exists roadmap_status text;   -- generando | listo | error
+alter table client_brain add column if not exists roadmap_at timestamptz;
+alter table client_brain add column if not exists roadmap_error text;
+alter table milestones add column if not exists source text;             -- 'ia' = hito del roadmap personalizado
+alter table action_items drop constraint if exists action_items_source_check;
+alter table action_items add constraint action_items_source_check check (source in ('fathom','manual','notion','ia','recorrido','roadmap'));

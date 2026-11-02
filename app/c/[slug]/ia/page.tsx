@@ -13,11 +13,11 @@ export default async function PortalIa({ params }: { params: Promise<{ slug: str
   const key = DEMO ? { connected: false, hint: null, verified_at: null } : await getAiKeyStatus(org.id);
   return (
     <>
-      <section className="hello">
+      <header className="ai-head">
         <h1>Fractal IA</h1>
-        <p>Tu consultor disponible todo el tiempo. Conoce tu Segundo cerebro, tu roadmap y el método de Fractal, así que podés pedirle ideas, guiones, revisiones de tu oferta o ayuda para decidir.</p>
-      </section>
-      <div style={{ marginTop: 26 }} className="stack">
+        <p className="muted small">Tu consultor 24/7, con tu Segundo cerebro y el método de Fractal.</p>
+      </header>
+      <div className="stack" style={{ gap: 12 }}>
         <AiKeyConnect orgId={org.id} connected={key.connected} hint={key.hint} />
         {key.connected && (
           <FractalChat

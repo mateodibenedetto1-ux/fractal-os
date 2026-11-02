@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 
 type Source = { id: string; title: string };
@@ -43,6 +43,23 @@ export function FractalChat({ clients = [], initialClient, fixedClient, mode = '
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
+  const shell = useRef<HTMLDivElement>(null);
+  const log = useRef<HTMLDivElement>(null);
+  const stick = useRef(true); // seguir el final solo si la persona no subió a leer
+
+  // El chat ocupa el alto que queda en pantalla: la página no se mueve, solo la conversación
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = shell.current;
+      if (!el) return;
+      if (window.innerWidth < 640) { el.style.height = ''; return; }
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      el.style.height = `${Math.max(420, window.innerHeight - top - 24)}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
   const box = useRef<HTMLTextAreaElement>(null);
 
   // Conversación por cliente, guardada solo en este navegador
@@ -53,11 +70,15 @@ export function FractalChat({ clients = [], initialClient, fixedClient, mode = '
     if (busy) return;
     try { sessionStorage.setItem(`${KEY}:${mode}:${client}`, JSON.stringify(msgs.slice(-30))); } catch { /* sin storage */ }
   }, [msgs, busy, client, mode]);
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [msgs]);
+  useEffect(() => {
+    const el = log.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [msgs]);
 
   const send = async (text: string) => {
     const q = text.trim();
     if (!q || busy) return;
+    stick.current = true;
     const next: Msg[] = [...msgs, { role: 'user', content: q }];
     setMsgs([...next, { role: 'assistant', content: '' }]);
     setInput('');
@@ -84,14 +105,14 @@ export function FractalChat({ clients = [], initialClient, fixedClient, mode = '
       setMsgs([...next, { role: 'assistant', content: `⚠️ ${e instanceof Error && e.message ? e.message : 'No pude responder.'}` }]);
     } finally {
       setBusy(false);
-      box.current?.focus();
+      box.current?.focus({ preventScroll: true });
     }
   };
 
   const cited = (m: Msg) => (m.sources ?? []).filter((s) => m.content.includes(`[${s.title}`));
 
   return (
-    <div className="ai">
+    <div className="ai" ref={shell}>
       <div className="ai-bar">
         {fixedClient ? <span className="muted small">{mode === 'client' ? 'Conoce tu Segundo cerebro, tu roadmap y tus tareas' : 'Con el contexto de este cliente'}</span> : (
           <label className="row" style={{ gap: 8 }}>
@@ -105,7 +126,7 @@ export function FractalChat({ clients = [], initialClient, fixedClient, mode = '
         {msgs.length > 0 && <button className="btn ghost sm" onClick={() => setMsgs([])} disabled={busy}>Nueva conversación</button>}
       </div>
 
-      <div className="ai-log">
+      <div className="ai-log" ref={log} onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
         {!msgs.length && (
           <div className="ai-empty">
             <h2>¿En qué te ayudo?</h2>

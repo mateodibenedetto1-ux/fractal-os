@@ -299,3 +299,12 @@ export async function getTeamCalls(limit = 40): Promise<TeamCall[]> {
     .eq('org_id', agency.id).order('held_at', { ascending: false }).limit(limit);
   return (data ?? []) as TeamCall[];
 }
+
+export interface BrainMeta { roadmap_status: 'generando' | 'listo' | 'error' | null; roadmap_at: string | null; roadmap_error: string | null }
+
+export async function getBrainMeta(orgId: string): Promise<BrainMeta> {
+  if (DEMO) return { roadmap_status: null, roadmap_at: null, roadmap_error: null };
+  const sb = await supabaseServer();
+  const { data } = await sb.from('client_brain').select('roadmap_status, roadmap_at, roadmap_error').eq('org_id', orgId).maybeSingle();
+  return (data ?? { roadmap_status: null, roadmap_at: null, roadmap_error: null }) as BrainMeta;
+}

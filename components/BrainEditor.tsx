@@ -4,14 +4,21 @@ import { useEffect, useRef, useState } from 'react';
 import { saveBrain } from '@/lib/actions';
 import { BRAIN, MODULES, brainMarkdown, brainPct, sectionPct, type BrainData } from '@/lib/brain';
 
+type RoadmapStatus = 'generando' | 'listo' | 'error' | null;
+const THRESHOLD = 80; // igual que ROADMAP_THRESHOLD en lib/roadmap-ai
+
 interface Props {
   orgId: string;
   name: string;
   initial: BrainData;
   demo?: boolean;
+  roadmap?: { roadmap_status: RoadmapStatus; roadmap_at: string | null; roadmap_error: string | null };
+  /** Vista del equipo: puede volver a crear el roadmap. */
+  staff?: boolean;
+  roadmapHref?: string;
 }
 
-export function BrainEditor({ orgId, name, initial, demo }: Props) {
+export function BrainEditor({ orgId, name, initial, demo, roadmap, staff, roadmapHref }: Props) {
   const [data, setData] = useState<BrainData>(initial);
   const [active, setActive] = useState(() => BRAIN.find((s) => sectionPct(initial, s) < 100)?.k ?? BRAIN[0].k);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -53,6 +60,36 @@ export function BrainEditor({ orgId, name, initial, demo }: Props) {
   const mod = MODULES.find((m) => m.k === section.mod)!;
   const total = brainPct(data);
 
+  // ---------- Roadmap personalizado ----------
+  const [rm, setRm] = useState(roadmap ?? { roadmap_status: null as RoadmapStatus, roadmap_at: null as string | null, roadmap_error: null as string | null });
+  const [rmBusy, setRmBusy] = useState(false);
+  // El servidor lo dispara al guardar cuando se cruza el umbral; acá solo lo reflejamos
+  useEffect(() => {
+    if (!rm.roadmap_status && total >= THRESHOLD && status === 'saved' && !demo) setRm((r) => ({ ...r, roadmap_status: 'generando' }));
+  }, [total, status, rm.roadmap_status, demo]);
+  useEffect(() => {
+    if (rm.roadmap_status !== 'generando' || demo) return;
+    const id = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/brain/roadmap?org=${orgId}`, { cache: 'no-store' });
+        if (r.ok) { const j = await r.json(); if (j.roadmap_status && j.roadmap_status !== 'generando') setRm(j); }
+      } catch { /* reintenta en el próximo ciclo */ }
+    }, 6000);
+    return () => clearInterval(id);
+  }, [rm.roadmap_status, orgId, demo]);
+  const createRoadmap = async () => {
+    setRmBusy(true);
+    setRm((r) => ({ ...r, roadmap_status: 'generando', roadmap_error: null }));
+    try {
+      await flush();
+      const r = await fetch('/api/brain/roadmap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ orgId }) });
+      const j = await r.json().catch(() => ({}));
+      setRm(r.ok ? { roadmap_status: 'listo', roadmap_at: new Date().toISOString(), roadmap_error: null } : { roadmap_status: 'error', roadmap_at: null, roadmap_error: j.error ?? 'No se pudo crear' });
+    } finally {
+      setRmBusy(false);
+    }
+  };
+
   const go = (k: string) => {
     void flush();
     setActive(k);
@@ -68,7 +105,52 @@ export function BrainEditor({ orgId, name, initial, demo }: Props) {
     URL.revokeObjectURL(a.href);
   };
 
+  const banner = (
+    <div className={`panel panel-pad brain-roadmap ${rm.roadmap_status ?? 'pendiente'}`}>
+      {rm.roadmap_status === 'listo' ? (
+        <div className="row between wrap" style={{ gap: 12 }}>
+          <div className="grow" style={{ minWidth: 240 }}>
+            <b>Roadmap personalizado listo</b>
+            <p className="muted small">Creado el {new Date(rm.roadmap_at ?? Date.now()).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })} a partir de este Segundo cerebro. Tiene los hitos de las 12 semanas, las tareas en Accionables y el documento con la estrategia en Biblioteca.</p>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            {roadmapHref && <a className="btn primary sm" href={roadmapHref}>Ver roadmap</a>}
+            {staff && <button className="btn sm" disabled={rmBusy} onClick={() => { if (confirm('¿Volver a crear el roadmap? Reemplaza los hitos y las tareas pendientes que creó la IA.')) void createRoadmap(); }}>Volver a crear</button>}
+          </div>
+        </div>
+      ) : rm.roadmap_status === 'generando' ? (
+        <div>
+          <b className="ai-typing">Creando tu roadmap personalizado…</b>
+          <p className="muted small">Lo armamos con todo lo que escribiste y con cómo trabajamos con todos nuestros clientes. Tarda 1 o 2 minutos; podés seguir acá.</p>
+        </div>
+      ) : rm.roadmap_status === 'error' ? (
+        <div className="row between wrap" style={{ gap: 12 }}>
+          <div className="grow" style={{ minWidth: 240 }}>
+            <b>No se pudo crear el roadmap</b>
+            <p className="muted small">{staff ? rm.roadmap_error : 'Volvé a intentar en un rato. Si sigue fallando, avisale al equipo de Fractal.'}</p>
+          </div>
+          <button className="btn sm" disabled={rmBusy} onClick={() => void createRoadmap()}>Reintentar</button>
+        </div>
+      ) : (
+        <div className="row between wrap" style={{ gap: 12 }}>
+          <div className="grow" style={{ minWidth: 240 }}>
+            <b>{total >= THRESHOLD ? 'Ya podés crear tu roadmap' : `Completá el ${THRESHOLD} % y creamos tu roadmap`}</b>
+            <p className="muted small">
+              {total >= THRESHOLD
+                ? 'Con lo que escribiste armamos tu roadmap personalizado de 12 semanas.'
+                : `Cuando llegues al ${THRESHOLD} %, se crea solo tu roadmap personalizado de 12 semanas, basado en lo que escribas acá. Te falta ${THRESHOLD - total} %.`}
+            </p>
+            <div className="bar" style={{ maxWidth: 320, marginTop: 8 }}><span style={{ width: `${Math.min(100, (total / THRESHOLD) * 100)}%` }} /></div>
+          </div>
+          {(total >= THRESHOLD || staff) && <button className="btn primary sm" disabled={rmBusy || demo} onClick={() => void createRoadmap()}>Crear roadmap</button>}
+        </div>
+      )}
+    </div>
+  );
+
   return (
+    <>
+    {banner}
     <div className="brain" ref={top}>
       <aside className="brain-index">
         <div className="brain-total">
@@ -130,5 +212,6 @@ export function BrainEditor({ orgId, name, initial, demo }: Props) {
         </div>
       </section>
     </div>
+    </>
   );
 }
