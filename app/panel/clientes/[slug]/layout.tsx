@@ -14,7 +14,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
           <Link href="/panel/clientes" className="back-link"><Icon name="back" size={15} /> Todos los clientes</Link>
           <h1 style={{ marginTop: 10 }}>{org.name}</h1>
           <p>
-            {STATUS_LABEL[org.status]}
+            {org.segment === 'consulting' ? 'Consulting · ' : 'B2B · '}{STATUS_LABEL[org.status]}
             {org.offer ? ` · ${org.offer}` : ''}
             {org.program_month ? ` · Mes ${org.program_month}` : ''}
           </p>
@@ -23,6 +23,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
       </div>
       <nav className="tabs" aria-label="Secciones del cliente">
         <NavLink href={base} exact>Resumen</NavLink>
+        {org.segment === 'consulting' && <NavLink href={`${base}/cerebro`}>Segundo cerebro</NavLink>}
         <NavLink href={`${base}/accionables`}>Accionables</NavLink>
         <NavLink href={`${base}/llamadas`}>Llamadas</NavLink>
         <NavLink href={`${base}/recursos`}>Recursos</NavLink>

@@ -28,6 +28,12 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
               {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
           </label>
+          <label className="field">Tipo
+            <select className="select" name="segment" defaultValue={org.segment ?? 'b2b'}>
+              <option value="b2b">B2B</option>
+              <option value="consulting">Consulting</option>
+            </select>
+          </label>
           <label className="field">Oferta<input className="input" name="offer" defaultValue={org.offer ?? ''} /></label>
           <label className="field">Mes del programa<input className="input" name="program_month" type="number" min={1} max={24} defaultValue={org.program_month ?? ''} /></label>
           <label className="field">Fecha de inicio<input className="input" name="start_date" type="date" defaultValue={org.start_date ?? ''} /></label>

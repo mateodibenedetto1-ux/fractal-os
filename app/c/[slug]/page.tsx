@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { getActions, getCalls, getDocs, getMilestones, getOrgBySlug, getResources, requireViewer } from '@/lib/data';
+import { getActions, getBrain, getCalls, getDocs, getMilestones, getOrgBySlug, getResources, requireViewer } from '@/lib/data';
+import { JourneyCard } from '@/components/Journey';
 import { computeRoadmap } from '@/lib/roadmap';
 import { RoadmapProgress } from '@/components/Roadmap';
 import { fmtDate } from '@/lib/format';
@@ -9,8 +10,10 @@ import { Icon } from '@/components/Icon';
 export default async function PortalHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const org = await getOrgBySlug(slug);
-  const [v, actions, calls, resources, docs, milestones] = await Promise.all([
+  const consulting = org.segment === 'consulting';
+  const [v, actions, calls, resources, docs, milestones, brain] = await Promise.all([
     requireViewer(), getActions(org.id), getCalls(org.id), getResources(org.id), getDocs(org.id), getMilestones(org.id),
+    consulting ? getBrain(org.id) : Promise.resolve({}),
   ]);
   const roadmap = computeRoadmap(milestones, org.start_date);
   const tops = actions.filter((a) => !a.parent_id);
@@ -37,8 +40,14 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
         </p>
       </section>
 
+      {consulting && (
+        <div style={{ marginTop: 32 }}>
+          <JourneyCard data={brain} href={`${base}/cerebro`} />
+        </div>
+      )}
+
       {roadmap.totalWeeks > 0 && (
-        <Link href={`${base}/roadmap`} className="panel panel-pad" style={{ display: 'block', marginTop: 32, textDecoration: 'none' }}>
+        <Link href={`${base}/roadmap`} className="panel panel-pad" style={{ display: 'block', marginTop: consulting ? 12 : 32, textDecoration: 'none' }}>
           <RoadmapProgress view={roadmap} compact />
         </Link>
       )}

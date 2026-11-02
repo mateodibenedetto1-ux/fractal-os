@@ -528,3 +528,47 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
   .wk-meta { flex-basis: 100%; padding-left: 32px; }
   .mo-week { grid-template-columns: 1fr; gap: 10px; }
 }
+
+/* ---------- Consulting · Recorrido y Segundo cerebro ---------- */
+.journey { display: block; padding: 22px 24px; text-decoration: none; color: inherit; transition: border-color .15s, transform .15s var(--ease); }
+.journey:hover { border-color: var(--muted); transform: translateY(-1px); }
+.journey-head { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.journey-kicker { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
+.journey-head p { margin: 6px 0 0; max-width: 56ch; color: var(--ink-2); }
+.journey-pct { font-size: 46px; font-weight: 200; letter-spacing: -.04em; line-height: 1; }
+.journey-pct small { font-size: 20px; color: var(--muted); }
+.journey-steps { list-style: none; margin: 22px 0 14px; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.journey-steps li { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted); }
+.journey-steps i { height: 6px; border-radius: 6px; background: linear-gradient(90deg, var(--brand) var(--p), var(--line) var(--p)); }
+.journey-steps li.done i { background: var(--brand); }
+.journey-steps li.now span { color: var(--ink); font-weight: 500; }
+.journey-steps span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journey-cta { font-size: 13.5px; color: var(--brand); }
+
+.brain { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 34px; align-items: start; scroll-margin-top: 20px; }
+.brain-index { position: sticky; top: 20px; }
+.brain-total { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.brain-total b { font-size: 40px; font-weight: 200; letter-spacing: -.04em; line-height: 1; }
+.brain-total .bar { margin-top: 8px; }
+.brain-index nav { display: flex; flex-direction: column; gap: 2px; }
+.brain-tab { all: unset; cursor: pointer; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 9px 10px; border-radius: 8px; color: var(--ink-2); transition: background .15s, color .15s; }
+.brain-tab:hover { background: var(--surface); color: var(--ink); }
+.brain-tab.on { background: var(--raised); color: var(--ink); box-shadow: 0 0 0 1px var(--line) inset; }
+.brain-tab i { font-style: italic; color: var(--brand); font-size: 15px; }
+.brain-tab em { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.brain-tab.full em { color: var(--ok); }
+.brain-status.error { color: var(--warn); }
+.brain-kicker { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.brain-body h2 { font-size: 34px; font-weight: 300; letter-spacing: -.03em; margin: 6px 0 4px; }
+.brain-field { display: flex; flex-direction: column; gap: 5px; }
+.brain-label { font-weight: 500; }
+.brain-field textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+
+@media (max-width: 860px) {
+  .brain { grid-template-columns: 1fr; gap: 20px; }
+  .brain-index { position: static; }
+  .brain-index nav { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .brain-tab { grid-template-columns: auto auto; white-space: nowrap; border: 1px solid var(--line); }
+  .brain-tab em { display: none; }
+  .journey-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 12px; }
+}

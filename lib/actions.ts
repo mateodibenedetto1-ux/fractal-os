@@ -61,6 +61,7 @@ export async function createClientAccount(form: FormData) {
   const { error } = await sb.from('organizations').insert({
     parent_id: agency?.id, kind: 'client', name, slug,
     status: str(form, 'status') ?? 'onboarding',
+    segment: str(form, 'segment') === 'consulting' ? 'consulting' : 'b2b',
     offer: str(form, 'offer'),
     contact_name: str(form, 'contact_name'),
     contact_email: str(form, 'contact_email')?.toLowerCase() ?? null,
@@ -81,6 +82,7 @@ export async function updateClientAccount(form: FormData) {
   const { error } = await sb.from('organizations').update({
     name: str(form, 'name'),
     status: str(form, 'status'),
+    ...(str(form, 'segment') ? { segment: str(form, 'segment') === 'consulting' ? 'consulting' : 'b2b' } : {}),
     offer: str(form, 'offer'),
     program_month: month ? Number(month) : null,
     start_date: str(form, 'start_date'),
@@ -474,5 +476,54 @@ export async function closeOverdueActions(orgId: string, before: string) {
     const admin = supabaseAdmin();
     for (const a of data ?? []) await pushActionToNotion(admin, a.id);
   });
+  refresh();
+}
+
+// ---------- Fractal Consulting: Segundo cerebro y Recorrido ----------
+
+/** Guarda respuestas del Segundo cerebro (lo puede hacer el cliente o el equipo). */
+export async function saveBrain(orgId: string, patch: Record<string, string>) {
+  if (DEMO) return;
+  const v = await requireViewer();
+  const sb = await supabaseServer();
+  const { data: cur } = await sb.from('client_brain').select('data').eq('org_id', orgId).maybeSingle();
+  const data = { ...((cur?.data as Record<string, string>) ?? {}), ...patch };
+  const { error } = await sb.from('client_brain').upsert({ org_id: orgId, data, updated_at: new Date().toISOString(), updated_by: v.id ?? null });
+  if (error) throw new Error(error.message);
+  // Las tareas "Completar …" de cada etapa se tildan solas cuando la sección llega al 80 %
+  const { BRAIN, sectionPct } = await import('./brain');
+  const ready = BRAIN.filter((s) => sectionPct(data, s) >= 80).map((s) => s.k);
+  if (ready.length) {
+    await supabaseAdmin().from('action_items').update({ done: true })
+      .eq('org_id', orgId).eq('done', false).eq('source', 'recorrido').like('title', 'Completar%').in('brain_section', ready);
+  }
+}
+
+/** Crea el Recorrido Fractal de un cliente de Consulting: una fase por sección y sus tareas. */
+export async function startJourney(orgId: string) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = supabaseAdmin();
+  const { data: org } = await sb.from('organizations').select('start_date, program_url').eq('id', orgId).single();
+  const { BRAIN } = await import('./brain');
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  let cursor = new Date((org?.start_date ?? iso(new Date())) + 'T12:00:00');
+  await sb.from('action_items').delete().eq('org_id', orgId).eq('source', 'recorrido');
+  await sb.from('milestones').delete().eq('org_id', orgId).not('brain_section', 'is', null);
+  let pos = 0;
+  for (const s of BRAIN) {
+    const start = iso(cursor);
+    const end = new Date(cursor); end.setDate(end.getDate() + s.weeks * 7 - 1);
+    await sb.from('milestones').insert({
+      org_id: orgId, title: `Etapa ${s.n} — ${s.stage}`, detail: s.intro, due_date: start, kind: 'fase', position: s.n, brain_section: s.k,
+    });
+    const due = iso(end);
+    await sb.from('action_items').insert([
+      { org_id: orgId, title: `Ver la clase de ${s.stage} en Skool`, why: org?.program_url ? `Programa: ${org.program_url}` : 'La clase de esta etapa está en Skool.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
+      { org_id: orgId, title: `Completar ${s.title} en tu Segundo cerebro`, why: 'Se tilda solo cuando la sección llega al 80 %.', owner: 'cliente', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
+      { org_id: orgId, title: `Revisar ${s.stage} con Fractal en la llamada`, why: 'Ajustamos juntos lo que completaste y definimos el próximo paso.', owner: 'fractal', responsable: 'Fractal', due_date: due, position: pos++, source: 'recorrido', brain_section: s.k },
+    ]);
+    cursor = new Date(end); cursor.setDate(cursor.getDate() + 1);
+  }
   refresh();
 }

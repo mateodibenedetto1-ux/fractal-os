@@ -6,16 +6,26 @@ import { Cells } from '@/components/Cells';
 
 export const metadata = { title: 'Clientes' };
 
-export default async function Clients() {
-  const clients = await listClients();
+export default async function Clients({ searchParams }: { searchParams: Promise<{ seg?: string }> }) {
+  const { seg = 'b2b' } = await searchParams;
+  const all = await listClients();
+  const clients = all.filter((c) => (c.segment ?? 'b2b') === seg);
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Clientes</h1>
-          <p>Cada cliente es una subcuenta con su propio portal.</p>
+          <p>Cada cliente es una subcuenta con su propio portal. B2B: lo hacemos por ellos. Consulting: lo construyen con nosotros.</p>
         </div>
+        <a href="#nuevo" className="btn">Nuevo cliente</a>
       </div>
+      <nav className="tabs">
+        {[{ k: 'b2b', l: 'B2B' }, { k: 'consulting', l: 'Consulting' }].map((t) => (
+          <Link key={t.k} href={`/panel/clientes?seg=${t.k}`} aria-current={seg === t.k ? 'page' : undefined}>
+            {t.l} · {all.filter((c) => (c.segment ?? 'b2b') === t.k).length}
+          </Link>
+        ))}
+      </nav>
 
       <ul className="list panel" style={{ marginBottom: 32 }}>
         {clients.map((c) => (
@@ -37,7 +47,7 @@ export default async function Clients() {
             </Link>
           </li>
         ))}
-        {!clients.length && <li className="empty">Todavía no hay clientes.</li>}
+        {!clients.length && <li className="empty">{seg === 'consulting' ? 'Todavía no hay clientes de Consulting. Crealos abajo eligiendo el tipo Consulting.' : 'Todavía no hay clientes B2B.'}</li>}
       </ul>
 
       <section id="nuevo" className="panel panel-pad">
@@ -48,6 +58,12 @@ export default async function Clients() {
         <form action={createClientAccount} className="stack" style={{ gap: 14 }}>
           <div className="form-grid">
             <label className="field">Nombre del cliente<input className="input" name="name" required /></label>
+            <label className="field">Tipo
+              <select className="select" name="segment" defaultValue={seg}>
+                <option value="b2b">B2B · lo hacemos por ellos</option>
+                <option value="consulting">Consulting · lo construyen con nosotros</option>
+              </select>
+            </label>
             <label className="field">Contacto principal<input className="input" name="contact_name" /></label>
             <label className="field">Email del contacto<input className="input" name="contact_email" type="email" /></label>
             <label className="field">Dominios o emails para Fathom<input className="input" name="email_domains" placeholder="empresa.com, persona@gmail.com" /></label>

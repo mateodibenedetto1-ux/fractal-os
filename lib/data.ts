@@ -132,6 +132,14 @@ export async function getTeamTasks(agencyId: string): Promise<ActionItem[]> {
   return (data ?? []) as ActionItem[];
 }
 
+/** Respuestas del Segundo cerebro de un cliente de Consulting. */
+export async function getBrain(orgId: string): Promise<Record<string, string>> {
+  if (DEMO) return {};
+  const sb = await supabaseServer();
+  const { data } = await sb.from('client_brain').select('data').eq('org_id', orgId).maybeSingle();
+  return (data?.data as Record<string, string>) ?? {};
+}
+
 export async function getCalls(orgId: string): Promise<Call[]> {
   if (DEMO) return demo.demoCalls.filter((c) => c.org_id === orgId).sort((a, b) => b.held_at.localeCompare(a.held_at));
   const sb = await supabaseServer();
