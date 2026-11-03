@@ -711,3 +711,4 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .past[open] > summary::before { transform: rotate(90deg); }
 .past .list-row { opacity: .75; }
 .past .list-row:hover { opacity: 1; }
+.side .theme-toggle span { display: none; }

@@ -4,6 +4,7 @@ import { signOut } from '@/lib/actions';
 import { Mark } from '@/components/Mark';
 import { NavLink } from '@/components/NavLink';
 import { Icon } from '@/components/Icon';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const NAV = [
   { href: '/panel', label: 'Home', icon: 'home', exact: true },
@@ -33,8 +34,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
               </NavLink>
             ))}
           </nav>
-          <div className="row" style={{ marginTop: 'auto', padding: '0 10px' }}>
+          <div className="row" style={{ marginTop: 'auto', padding: '0 10px', gap: 4 }}>
             <span className="small grow muted">{v.name}</span>
+            <ThemeToggle />
             {!DEMO && (
               <form action={signOut}>
                 <button className="btn ghost sm" aria-label="Salir"><Icon name="out" /></button>
