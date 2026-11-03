@@ -26,6 +26,7 @@ export interface Org {
   responsables?: Responsable[];
   notion_client_page?: string | null;
   segment?: 'b2b' | 'consulting';
+  vertical?: string | null;
   created_at: string;
 }
 
@@ -69,6 +70,7 @@ export interface ActionItem {
   owner: 'cliente' | 'fractal';
   responsable?: string | null;
   client_org_id?: string | null;
+  vertical?: string | null;
   brain_section?: string | null;
   notion_id?: string | null;
   notion_dirty?: boolean;

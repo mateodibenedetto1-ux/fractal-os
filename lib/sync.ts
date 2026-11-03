@@ -1,4 +1,5 @@
 import 'server-only';
+import { asVertical } from './verticals';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NOTION_DB, createRow, hasNotion, isNotionId, pageTitle, plainId, prop, queryDatabase, updateRow, val } from './notion';
 import type { Org, Responsable } from './types';
@@ -102,9 +103,10 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
       const { count } = await sb.from('action_items').select('id', { count: 'exact', head: true }).eq('org_id', org.id);
       let pos = count ?? 0;
       const { data: clientOrgs } = org.kind === 'agency'
-        ? await sb.from('organizations').select('id, notion_client_page').not('notion_client_page', 'is', null)
-        : { data: [] as { id: string; notion_client_page: string }[] };
+        ? await sb.from('organizations').select('id, notion_client_page, vertical').not('notion_client_page', 'is', null)
+        : { data: [] as { id: string; notion_client_page: string; vertical: string | null }[] };
       const clientByPage = new Map((clientOrgs ?? []).map((o) => [plainId(o.notion_client_page!), o.id]));
+      const verticalOf = new Map((clientOrgs ?? []).map((o) => [o.id, o.vertical]));
 
       for (const r of rows) {
         const id = plainId(r.id);
@@ -125,7 +127,12 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
         const clientRel: string[] = org.kind === 'agency' ? val(prop(r, 'Client')) ?? [] : [];
         const clientOrg = clientRel.map((x) => clientByPage.get(x)).find(Boolean) ?? null;
         // En el tracker de Fractal se ordena por fecha de creación en Notion
-        const extra = org.kind === 'agency' ? { client_org_id: clientOrg, created_at: r.created_time } : {};
+        // Vertical: la de Notion; si no tiene, la del cliente (o la de esta cuenta)
+        const vertical = asVertical(val(prop(r, 'Vertical'))) ?? asVertical(clientOrg ? verticalOf.get(clientOrg) : org.vertical);
+        const extra = {
+          ...(org.kind === 'agency' ? { client_org_id: clientOrg, created_at: r.created_time } : {}),
+          ...(vertical ? { vertical } : {}),
+        };
         const cur = byNotion.get(id);
         if (cur?.notion_dirty) {
           res.tasks++;
@@ -208,7 +215,7 @@ function responsableProps(name: string | null | undefined, list: Responsable[] =
  */
 export async function pushActionToNotion(sb: SupabaseClient, actionId: string): Promise<boolean> {
   const { data: a } = await sb.from('action_items')
-    .select('id, title, why, area, priority, due_date, done, responsable, notion_id, parent_id, org_id, organizations!action_items_org_id_fkey(notion_tasks_db, responsables)')
+    .select('id, title, why, area, priority, vertical, due_date, done, responsable, notion_id, parent_id, org_id, organizations!action_items_org_id_fkey(notion_tasks_db, responsables)')
     .eq('id', actionId).single();
   if (!a) return false;
   const org = (a as any).organizations as { notion_tasks_db: string | null; responsables: Responsable[] } | null;
@@ -224,6 +231,7 @@ export async function pushActionToNotion(sb: SupabaseClient, actionId: string): 
       'Due Date': a.due_date,
       Prioridad: a.priority ? PRIORITY_OUT[a.priority] : null,
       Priority: a.priority ? PRIORITY_P[a.priority] : null,
+      Vertical: a.vertical,
       ...responsableProps(a.responsable, org?.responsables),
     };
     if (isNotionId(a.notion_id)) {

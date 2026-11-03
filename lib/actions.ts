@@ -10,6 +10,7 @@ import { requireStaff, requireViewer } from './data';
 import { after } from 'next/server';
 import { pushActionToNotion, syncAtlasFromNotion, syncOrgFromNotion } from './sync';
 import { NOTION_DB, createRow, hasNotion, isNotionId, updateRow } from './notion';
+import { asVertical } from './verticals';
 import type { Org } from './types';
 
 const str = (f: FormData, k: string) => {
@@ -62,6 +63,7 @@ export async function createClientAccount(form: FormData) {
     parent_id: agency?.id, kind: 'client', name, slug,
     status: str(form, 'status') ?? 'onboarding',
     segment: str(form, 'segment') === 'consulting' ? 'consulting' : 'b2b',
+    vertical: asVertical(str(form, 'vertical')),
     offer: str(form, 'offer'),
     contact_name: str(form, 'contact_name'),
     contact_email: str(form, 'contact_email')?.toLowerCase() ?? null,
@@ -82,6 +84,7 @@ export async function updateClientAccount(form: FormData) {
   const { error } = await sb.from('organizations').update({
     name: str(form, 'name'),
     status: str(form, 'status'),
+    ...(form.has('vertical') ? { vertical: asVertical(str(form, 'vertical')) } : {}),
     ...(str(form, 'segment') ? { segment: str(form, 'segment') === 'consulting' ? 'consulting' : 'b2b' } : {}),
     offer: str(form, 'offer'),
     program_month: month ? Number(month) : null,
@@ -96,6 +99,11 @@ export async function updateClientAccount(form: FormData) {
     notion_url: str(form, 'notion_url'),
   }).eq('id', id);
   if (error) throw new Error(error.message);
+  // Las tareas del cliente que todavía no tienen vertical toman la del cliente (el cron las sube a Notion)
+  const vertical = asVertical(str(form, 'vertical'));
+  if (vertical) {
+    await sb.from('action_items').update({ vertical, notion_dirty: true }).is('vertical', null).is('parent_id', null).or(`org_id.eq.${id},client_org_id.eq.${id}`);
+  }
   refresh();
 }
 
@@ -115,6 +123,7 @@ export async function addAction(form: FormData) {
     owner: await ownerFor(sb, orgId, str(form, 'responsable'), str(form, 'owner')),
     responsable: str(form, 'responsable'),
     client_org_id: str(form, 'client_org_id'),
+    vertical: asVertical(str(form, 'vertical')) ?? await clientVertical(sb, str(form, 'client_org_id')),
     due_date: str(form, 'due_date'),
     source: 'manual',
     notion_dirty: true,
@@ -132,6 +141,23 @@ async function ownerFor(sb: Awaited<ReturnType<typeof supabaseServer>>, orgId: s
     if (side) return side;
   }
   return fallback === 'fractal' ? 'fractal' : 'cliente';
+}
+
+async function clientVertical(sb: Awaited<ReturnType<typeof supabaseServer>>, orgId: string | null) {
+  if (!orgId) return null;
+  const { data } = await sb.from('organizations').select('vertical').eq('id', orgId).single();
+  return asVertical(data?.vertical);
+}
+
+/** Cambia la vertical de una tarea y la refleja en Notion. */
+export async function setActionVertical(id: string, vertical: string | null) {
+  if (DEMO) return;
+  await requireStaff();
+  const sb = await supabaseServer();
+  const { error } = await sb.from('action_items').update({ vertical: asVertical(vertical), notion_dirty: true }).eq('id', id);
+  if (error) throw new Error(error.message);
+  await pushActionToNotion(supabaseAdmin(), id);
+  refresh();
 }
 
 /** Cambia el responsable de un accionable y lo refleja en Notion. */

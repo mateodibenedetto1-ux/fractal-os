@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useOptimistic, useState, useTransition } from 'react';
-import { deleteAction, setActionResponsable, toggleAction } from '@/lib/actions';
+import { deleteAction, setActionResponsable, setActionVertical, toggleAction } from '@/lib/actions';
 import { fmtDate, PRIORITY_LABEL } from '@/lib/format';
 import type { ActionItem, Call, Responsable } from '@/lib/types';
 import { Icon } from './Icon';
@@ -20,9 +20,23 @@ interface Props {
   clientNames?: Record<string, string>;
   progressLabel?: string;
   flatLabel?: string;
+  /** Verticales para filtrar y etiquetar (tracker de Fractal). */
+  verticals?: readonly string[];
+  /** Permite ordenar por fecha o prioridad. */
+  sortable?: boolean;
 }
 
-export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes', responsables = [], clientNames, progressLabel, flatLabel }: Props) {
+const PRIO_RANK: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 };
+const prioRank = (a: ActionItem) => PRIO_RANK[a.priority ?? ''] ?? 4;
+const dueKey = (a: ActionItem) => a.due_date ?? '9999';
+type SortKey = 'reciente' | 'fecha' | 'prioridad';
+const SORTERS: Record<SortKey, ((a: ActionItem, b: ActionItem) => number) | null> = {
+  reciente: null,
+  fecha: (a, b) => dueKey(a).localeCompare(dueKey(b)) || prioRank(a) - prioRank(b),
+  prioridad: (a, b) => prioRank(a) - prioRank(b) || dueKey(a).localeCompare(dueKey(b)),
+};
+
+export function ActionList({ items, calls, staff, demo, initialFilter = 'pendientes', responsables = [], clientNames, progressLabel, flatLabel, verticals = [], sortable }: Props) {
   const [local, setLocal] = useState(items);
   // Si el servidor trae datos nuevos (por ejemplo después de sincronizar con Notion), se reemplazan
   useEffect(() => setLocal(items), [items]);
@@ -31,6 +45,8 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
   );
   const [filter, setFilter] = useState(initialFilter);
   const [who, setWho] = useState('Todos');
+  const [vert, setVert] = useState('Todas');
+  const [sort, setSort] = useState<SortKey>(sortable ? 'fecha' : 'reciente');
   const [, start] = useTransition();
 
   const toggle = (id: string, done: boolean) => {
@@ -49,6 +65,13 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
     });
   };
 
+  const changeVertical = (id: string, vertical: string | null) => {
+    setLocal((s) => s.map((a) => (a.id === id ? { ...a, vertical } : a)));
+    start(async () => {
+      if (!demo) await setActionVertical(id, vertical);
+    });
+  };
+
   const remove = (id: string) => {
     if (!confirm('¿Borrar este accionable?')) return;
     start(async () => {
@@ -60,7 +83,11 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
   const tops = optimistic.filter((a) => !a.parent_id);
   const subs = (id: string) => optimistic.filter((a) => a.parent_id === id);
   const done = tops.filter((a) => a.done).length;
-  const visible = tops.filter((a) => (filter === 'todos' || !a.done || subs(a.id).some((s) => !s.done)) && (who === 'Todos' || (a.responsable ?? 'Sin asignar') === who));
+  const byVertical = tops.filter((a) => vert === 'Todas' || (a.vertical ?? 'Sin vertical') === vert);
+  const pending = byVertical.filter((a) => !a.done).length;
+  const visible = byVertical.filter((a) => (filter === 'todos' || !a.done || subs(a.id).some((s) => !s.done)) && (who === 'Todos' || (a.responsable ?? 'Sin asignar') === who));
+  const sorter = SORTERS[sort];
+  if (sorter) visible.sort(sorter);
 
   // Agrupar por llamada, de la más reciente a la más antigua
   const byCall = new Map<string, ActionItem[]>();
@@ -93,21 +120,37 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
         </div>
       </div>
 
-      <div className="row between">
+      <div className="row between wrap" style={{ gap: 10 }}>
         <div className="row" role="group" aria-label="Filtro">
           {(['pendientes', 'todos'] as const).map((f) => (
             <button key={f} className={`btn sm ${filter === f ? 'primary' : ''}`} onClick={() => setFilter(f)} aria-pressed={filter === f}>
-              {f === 'pendientes' ? `Pendientes · ${tops.length - done}` : 'Todos'}
+              {f === 'pendientes' ? `Pendientes · ${pending}` : 'Todos'}
             </button>
           ))}
         </div>
-        {responsables.length > 0 && (
-          <select className="select" value={who} onChange={(e) => setWho(e.target.value)} style={{ width: 180 }} aria-label="Filtrar por responsable">
-            <option>Todos</option>
-            {responsables.map((r) => <option key={r.name}>{r.name}</option>)}
-            <option>Sin asignar</option>
-          </select>
-        )}
+        <div className="row wrap filters" style={{ gap: 8 }}>
+          {verticals.length > 0 && (
+            <select className="select" value={vert} onChange={(e) => setVert(e.target.value)} aria-label="Filtrar por vertical">
+              <option value="Todas">Todas las verticales</option>
+              {verticals.map((v) => <option key={v}>{v}</option>)}
+              <option>Sin vertical</option>
+            </select>
+          )}
+          {responsables.length > 0 && (
+            <select className="select" value={who} onChange={(e) => setWho(e.target.value)} aria-label="Filtrar por responsable">
+              <option value="Todos">Todo el equipo</option>
+              {responsables.map((r) => <option key={r.name}>{r.name}</option>)}
+              <option>Sin asignar</option>
+            </select>
+          )}
+          {sortable && (
+            <select className="select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Ordenar">
+              <option value="fecha">Por fecha</option>
+              <option value="prioridad">Por prioridad</option>
+              <option value="reciente">Más recientes</option>
+            </select>
+          )}
+        </div>
       </div>
 
       <div className="panel">
@@ -122,7 +165,7 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
             <ul className="list">
               {g.items.map((a) => (
                 <li key={a.id}>
-                  <Row a={a} onToggle={toggle} onDelete={staff ? remove : undefined} responsables={responsables} onAssign={staff ? assign : undefined} client={a.client_org_id ? clientNames?.[a.client_org_id] : undefined} />
+                  <Row a={a} onToggle={toggle} onDelete={staff ? remove : undefined} responsables={responsables} onAssign={staff ? assign : undefined} client={a.client_org_id ? clientNames?.[a.client_org_id] : undefined} verticals={verticals} onVertical={staff && verticals.length ? changeVertical : undefined} />
                   {subs(a.id).map((s) => (
                     <Row key={s.id} a={s} sub onToggle={toggle} onDelete={staff ? remove : undefined} />
                   ))}
@@ -136,9 +179,10 @@ export function ActionList({ items, calls, staff, demo, initialFilter = 'pendien
   );
 }
 
-function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [], client }: {
+function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [], client, verticals = [], onVertical }: {
   a: ActionItem; sub?: boolean; onToggle: (id: string, d: boolean) => void; onDelete?: (id: string) => void;
   onAssign?: (id: string, r: string | null) => void; responsables?: Responsable[]; client?: string;
+  verticals?: readonly string[]; onVertical?: (id: string, v: string | null) => void;
 }) {
   const id = `a-${a.id}`;
   return (
@@ -149,7 +193,7 @@ function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [], client }
           {a.title}
         </label>
         {a.why && !sub && <p className="why">{a.why}</p>}
-        {!sub && (a.area || a.priority || a.owner === 'fractal' || a.due_date || a.responsable || onAssign) && (
+        {!sub && (a.area || a.priority || a.vertical || a.owner === 'fractal' || a.due_date || a.responsable || onAssign || onVertical) && (
           <div className="row wrap" style={{ gap: 6, marginTop: 7 }}>
             {client && <span className="tag">{client}</span>}
             {onAssign && responsables.length > 0 ? (
@@ -168,6 +212,12 @@ function Row({ a, sub, onToggle, onDelete, onAssign, responsables = [], client }
               a.owner === 'fractal' && <span className="tag brand">Lo hace Fractal</span>
             )}
             {a.priority && <span className={`tag ${a.priority === 'critica' || a.priority === 'alta' ? 'warn' : ''}`}>{PRIORITY_LABEL[a.priority]}</span>}
+            {onVertical ? (
+              <select className="tag-select" value={a.vertical ?? ''} onChange={(e) => onVertical(a.id, e.target.value || null)} aria-label="Vertical">
+                <option value="">Sin vertical</option>
+                {verticals.map((v) => <option key={v}>{v}</option>)}
+              </select>
+            ) : a.vertical && <span className="tag">{a.vertical}</span>}
             {a.area && <span className="tag">{a.area}</span>}
             {a.due_date && <span className="tag">Para el {fmtDate(a.due_date, { day: 'numeric', month: 'short' })}</span>}
           </div>

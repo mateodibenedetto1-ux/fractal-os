@@ -1,4 +1,5 @@
 import { getActions, getCalls, getMilestones, getOrgBySlug } from '@/lib/data';
+import { VERTICALS } from '@/lib/verticals';
 import { computeRoadmap } from '@/lib/roadmap';
 import { RoadmapProgress } from '@/components/Roadmap';
 import { syncClientNow, updateClientAccount } from '@/lib/actions';
@@ -32,6 +33,12 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
             <select className="select" name="segment" defaultValue={org.segment ?? 'b2b'}>
               <option value="b2b">B2B</option>
               <option value="consulting">Consulting</option>
+            </select>
+          </label>
+          <label className="field">Vertical
+            <select className="select" name="vertical" defaultValue={org.vertical ?? ''}>
+              <option value="">Sin vertical</option>
+              {VERTICALS.map((v) => <option key={v}>{v}</option>)}
             </select>
           </label>
           <label className="field">Oferta<input className="input" name="offer" defaultValue={org.offer ?? ''} /></label>

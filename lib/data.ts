@@ -109,7 +109,7 @@ export async function getAllOpenActions(): Promise<(ActionItem & { org: Pick<Org
   const sb = await supabaseServer();
   const { data } = await sb
     .from('action_items')
-    .select('*, org:organizations!action_items_org_id_fkey(name, slug, kind)')
+    .select('*, org:organizations!action_items_org_id_fkey(name, slug, kind, status)')
     .eq('done', false)
     .is('parent_id', null)
     .order('created_at', { ascending: false })

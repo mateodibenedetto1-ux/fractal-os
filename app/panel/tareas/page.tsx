@@ -4,6 +4,7 @@ import { addAction, syncClientNow } from '@/lib/actions';
 import { DEMO } from '@/lib/env';
 import { fmtShort, PRIORITY_LABEL } from '@/lib/format';
 import { ActionList } from '@/components/ActionList';
+import { VERTICALS } from '@/lib/verticals';
 
 export const metadata = { title: 'Tareas' };
 
@@ -12,8 +13,9 @@ const AREAS = ['Creative', 'Editing', 'Publishing', 'Operations', 'Client Succes
 
 export default async function Tasks({ searchParams }: { searchParams: Promise<{ de?: string }> }) {
   const { de = 'tracker' } = await searchParams;
-  const [all, agency, clients] = await Promise.all([getAllOpenActions(), getAgency(), listClients()]);
-  const open = all.filter((a) => (a.org as { kind?: string }).kind !== 'agency');
+  const [all, agency, allClients] = await Promise.all([getAllOpenActions(), getAgency(), listClients()]);
+  const clients = allClients.filter((c) => c.status !== 'finalizado');
+  const open = all.filter((a) => { const o = a.org as { kind?: string; status?: string }; return o.kind !== 'agency' && o.status !== 'finalizado'; });
   const team = agency ? await getTeamTasks(agency.id) : [];
   const teamOpen = team.filter((a) => !a.done && !a.parent_id).length;
 
@@ -70,6 +72,12 @@ export default async function Tasks({ searchParams }: { searchParams: Promise<{ 
                     <select className="select" name="priority" defaultValue="alta"><option value="alta">P1</option><option value="media">P2</option><option value="baja">P3</option></select>
                   </label>
                   <label className="field">Fecha límite<input className="input" name="due_date" type="date" /></label>
+                  <label className="field">Vertical
+                    <select className="select" name="vertical" defaultValue="">
+                      <option value="">La del cliente</option>
+                      {VERTICALS.map((v) => <option key={v}>{v}</option>)}
+                    </select>
+                  </label>
                   <label className="field">Área
                     <select className="select" name="area" defaultValue="">
                       <option value="">Sin área</option>
@@ -86,9 +94,11 @@ export default async function Tasks({ searchParams }: { searchParams: Promise<{ 
               staff
               demo={DEMO}
               responsables={agency.responsables ?? []}
-              clientNames={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
+              clientNames={Object.fromEntries(allClients.map((c) => [c.id, c.name]))}
               progressLabel="Avance del equipo"
               flatLabel="Tracker Fractal"
+              verticals={VERTICALS}
+              sortable
             />
           </div>
         ) : (
