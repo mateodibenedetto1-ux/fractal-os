@@ -5,6 +5,7 @@ import { Mark } from '@/components/Mark';
 import { NavLink } from '@/components/NavLink';
 import { Icon } from '@/components/Icon';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { canSeeFinance } from '@/lib/finance';
 
 const NAV = [
   { href: '/panel', label: 'Home', icon: 'home', exact: true },
@@ -13,6 +14,7 @@ const NAV = [
   { href: '/panel/tareas', label: 'Tareas', icon: 'check' },
   { href: '/panel/calendario', label: 'Calendario', icon: 'calendar' },
   { href: '/panel/objetivos', label: 'Objetivos', icon: 'target' },
+  { href: '/panel/finanzas', label: 'Finanzas', icon: 'chart', finance: true },
   { href: '/panel/laboratorio', label: 'Laboratorio', icon: 'flask' },
   { href: '/panel/reuniones', label: 'Reuniones', icon: 'video' },
   { href: '/panel/integraciones', label: 'Integraciones', icon: 'plug' },
@@ -28,7 +30,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         <aside className="side">
           <Mark href="/panel" />
           <nav aria-label="Panel">
-            {NAV.map((n) => (
+            {NAV.filter((n) => !('finance' in n) || canSeeFinance(v.email)).map((n) => (
               <NavLink key={n.href} href={n.href} className="nav" exact={n.exact}>
                 <Icon name={n.icon} /> {n.label}
               </NavLink>
