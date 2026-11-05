@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { refreshFinance } from '@/lib/finance-actions';
 import type { FinanceData, Month } from '@/lib/finance';
+import { Cube } from './Mark';
 
-const C = { green: '#00E87A', cyan: '#00B8FF', amber: '#FFB800', red: '#FF4D6A', violet: '#A78BFA', grey: '#5d6b6e' };
+/** Paleta de Fractal OS (se adapta a modo claro y oscuro). */
+const C = { billed: 'var(--brand)', cash: 'var(--ok)', team: 'var(--brand)', soft: 'var(--focus)', fees: 'var(--warn)', grey: 'var(--muted)', neg: 'var(--brand)', ink: 'var(--ink)' };
 const CAT = [
-  { k: 'team', l: 'Equipo', c: C.cyan },
-  { k: 'software', l: 'Software', c: C.violet },
-  { k: 'fees', l: 'Comisiones', c: C.amber },
+  { k: 'team', l: 'Equipo', c: C.team },
+  { k: 'software', l: 'Software', c: C.soft },
+  { k: 'fees', l: 'Comisiones', c: C.fees },
   { k: 'other', l: 'Otros', c: C.grey },
 ] as const;
 
@@ -65,7 +67,7 @@ function Delta({ now, prev, invert }: { now: number; prev: number | undefined; i
   if (prev == null || prev === 0) return null;
   const d = (now - prev) / Math.abs(prev);
   const good = invert ? d <= 0 : d >= 0;
-  return <span className={`fin-delta ${good ? 'up' : 'down'}`}>{d >= 0 ? '▲' : '▼'} {Math.abs(Math.round(d * 100))}% vs mes anterior</span>;
+  return <span className={`fin-delta ${good ? 'up' : 'down'}`}>{d >= 0 ? '↑' : '↓'} {Math.abs(Math.round(d * 100))}% vs. mes anterior</span>;
 }
 
 // ---------- Gráficos ----------
@@ -86,23 +88,22 @@ function Cumulative({ months }: { months: Month[] }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className={`fin-svg ${mounted ? 'on' : ''}`} role="img" aria-label="Acumulado facturado y cobrado del año">
       <defs>
-        <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={C.amber} stopOpacity=".35" /><stop offset="1" stopColor={C.amber} stopOpacity="0" /></linearGradient>
-        <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={C.green} stopOpacity=".4" /><stop offset="1" stopColor={C.green} stopOpacity="0" /></linearGradient>
-        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+        <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: C.billed, stopOpacity: 0.16 }} /><stop offset="1" style={{ stopColor: C.billed, stopOpacity: 0 }} /></linearGradient>
+        <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: C.cash, stopOpacity: 0.2 }} /><stop offset="1" style={{ stopColor: C.cash, stopOpacity: 0 }} /></linearGradient>
       </defs>
       {[0.25, 0.5, 0.75, 1].map((f) => <line key={f} x1={P} x2={W - P} y1={y(max * f / 1.08)} y2={y(max * f / 1.08)} className="fin-grid" />)}
       <path d={area('b')} fill="url(#gB)" className="fin-area" />
       <path d={area('c')} fill="url(#gC)" className="fin-area" />
-      <path d={line('b')} stroke={C.amber} className="fin-line" filter="url(#glow)" />
-      <path d={line('c')} stroke={C.green} className="fin-line" filter="url(#glow)" />
+      <path d={line('b')} style={{ stroke: C.billed }} className="fin-line" />
+      <path d={line('c')} style={{ stroke: C.cash }} className="fin-line" />
       {pts.map((p, i) => (
         <g key={p.label}>
-          <circle cx={x(i)} cy={y(p.c)} r="3.2" fill={C.green} filter="url(#glow)" className="fin-dot" style={{ animationDelay: `${0.5 + i * 0.08}s` }} />
-          <text x={x(i)} y={H - 6} className="fin-axis" textAnchor="middle">{p.label.toUpperCase()}</text>
+          <circle cx={x(i)} cy={y(p.c)} r="3.2" className="fin-dot" style={{ fill: 'var(--surface)', stroke: C.cash, strokeWidth: 2, animationDelay: `${0.5 + i * 0.08}s` }} />
+          <text x={x(i)} y={H - 6} className="fin-axis" textAnchor="middle">{p.label}</text>
         </g>
       ))}
       {pts.length > 0 && (
-        <text x={x(pts.length - 1)} y={y(pts[pts.length - 1].b) - 10} className="fin-tip" textAnchor="end" fill={C.amber}>{kfmt(pts[pts.length - 1].b)}</text>
+        <text x={x(pts.length - 1)} y={y(pts[pts.length - 1].b) - 10} className="fin-tip" textAnchor="end" style={{ fill: C.billed }}>{kfmt(pts[pts.length - 1].b)}</text>
       )}
     </svg>
   );
@@ -121,7 +122,7 @@ function Bars({ months, sel, onSel }: { months: Month[]; sel: string; onSel: (k:
             <span className="fin-bar b" style={{ height: mounted ? `${(m.billed / max) * 100}%` : 0, transitionDelay: `${i * 60}ms` }} />
             <span className="fin-bar c" style={{ height: mounted ? `${(m.cash / max) * 100}%` : 0, transitionDelay: `${i * 60 + 80}ms` }} />
           </span>
-          <span className="fin-axis-l">{m.label.toUpperCase()}</span>
+          <span className="fin-axis-l">{m.label}</span>
         </button>
       ))}
     </div>
@@ -132,13 +133,13 @@ function Bars({ months, sel, onSel }: { months: Month[]; sel: string; onSel: (k:
 function Waterfall({ m }: { m: Month }) {
   const mounted = useMounted(60);
   const steps = [
-    { l: 'Cobrado', v: m.cash, kind: 'total', c: C.green },
-    { l: 'Equipo', v: -m.team, kind: 'step', c: C.cyan },
-    { l: 'Software', v: -m.software, kind: 'step', c: C.violet },
-    { l: 'Comis.', v: -(m.fees + m.other), kind: 'step', c: C.amber },
-    { l: 'Profit', v: m.profit, kind: 'total', c: m.profit >= 0 ? C.green : C.red },
+    { l: 'Cobrado', v: m.cash, kind: 'total', c: C.cash },
+    { l: 'Equipo', v: -m.team, kind: 'step', c: C.team },
+    { l: 'Software', v: -m.software, kind: 'step', c: C.soft },
+    { l: 'Comis.', v: -(m.fees + m.other), kind: 'step', c: C.fees },
+    { l: 'Profit', v: m.profit, kind: 'total', c: m.profit >= 0 ? C.cash : C.neg },
     { l: 'Caja', v: -m.pettyCash, kind: 'step', c: C.grey },
-    { l: 'Repartible', v: m.distributable, kind: 'total', c: m.distributable >= 0 ? C.green : C.red },
+    { l: 'Repartible', v: m.distributable, kind: 'total', c: m.distributable >= 0 ? C.cash : C.neg },
   ];
   const top = Math.max(1, m.cash, m.profit);
   const bottom = Math.min(0, m.profit, m.distributable);
@@ -155,10 +156,10 @@ function Waterfall({ m }: { m: Month }) {
         return (
           <div key={s.l} className="fin-wf-col">
             <div className="fin-wf-track">
-              <span className={`fin-wf-bar ${s.kind}`} style={{ bottom: `${b}%`, height: mounted ? `${Math.max(h, 0.8)}%` : 0, background: s.c, boxShadow: `0 0 14px ${s.c}66`, transitionDelay: `${i * 90}ms` }} />
+              <span className={`fin-wf-bar ${s.kind}`} style={{ bottom: `${b}%`, height: mounted ? `${Math.max(h, 0.8)}%` : 0, background: s.c, transitionDelay: `${i * 90}ms` }} />
             </div>
             <span className="fin-wf-v" style={{ color: s.kind === 'total' ? s.c : undefined }}>{s.kind === 'step' && s.v ? '–' : ''}{kfmt(Math.abs(s.v))}</span>
-            <span className="fin-axis-l">{s.l.toUpperCase()}</span>
+            <span className="fin-axis-l">{s.l}</span>
           </div>
         );
       })}
@@ -166,13 +167,13 @@ function Waterfall({ m }: { m: Month }) {
   );
 }
 
-function Ring({ value, size = 92, color = C.green }: { value: number; size?: number; color?: string }) {
+function Ring({ value, size = 92, color = C.cash }: { value: number; size?: number; color?: string }) {
   const mounted = useMounted(200);
   const r = size / 2 - 7, c = 2 * Math.PI * r;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="fin-ring" aria-hidden="true">
       <circle cx={size / 2} cy={size / 2} r={r} className="fin-ring-bg" />
-      <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeDasharray={c} strokeDashoffset={mounted ? c * (1 - Math.min(1, value)) : c} className="fin-ring-fg" style={{ filter: `drop-shadow(0 0 6px ${color})` }} />
+      <circle cx={size / 2} cy={size / 2} r={r} strokeDasharray={c} strokeDashoffset={mounted ? c * (1 - Math.min(1, value)) : c} className="fin-ring-fg" style={{ stroke: color }} />
     </svg>
   );
 }
@@ -189,7 +190,7 @@ function Spend({ months }: { months: Month[] }) {
           <span className="fin-stack-bar" style={{ height: mounted ? `${(m.direct / max) * 100}%` : 0, transitionDelay: `${i * 60}ms` }}>
             {CAT.map((c) => m[c.k] > 0 && <span key={c.k} style={{ flexGrow: m[c.k], background: c.c }} />)}
           </span>
-          <span className="fin-axis-l">{m.label.toUpperCase()}</span>
+          <span className="fin-axis-l">{m.label}</span>
         </div>
       ))}
     </div>
@@ -218,7 +219,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
     <div className="fin">
       <header className="fin-head">
         <div>
-          <div className="fin-kicker"><span className="fin-pulse" /> FINANZAS · FRACTAL · {data.year}</div>
+          <div className="fin-kicker"><Cube size={14} /> Fractal · {data.year}</div>
           <h1>Finanzas</h1>
         </div>
         <div className="fin-head-actions">
@@ -230,11 +231,11 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
 
       <section className="fin-hero fin-card">
         <div className="fin-hero-main">
-          <Label>FACTURADO_ACUMULADO_{data.year}</Label>
+          <Label>Facturado acumulado {data.year}</Label>
           <div className="fin-big"><Count value={t.billed} ms={1800} /></div>
           <div className="fin-hero-sub">
-            <span><b style={{ color: C.green }}><Count value={t.cash} /></b> cobrado</span>
-            <span><b style={{ color: C.amber }}><Count value={t.pending} /></b> pendiente de cobro</span>
+            <span><b style={{ color: C.cash }}><Count value={t.cash} /></b> cobrado</span>
+            <span><b style={{ color: C.billed }}><Count value={t.pending} /></b> pendiente de cobro</span>
             <span><b><Count value={t.distributable} /></b> profit repartible</span>
           </div>
           <div className="fin-ring-row">
@@ -244,12 +245,12 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
             </div>
             <div>
               <div className="fin-muted small">de lo facturado ya está cobrado</div>
-              <div className="fin-muted small">Margen del año: <b style={{ color: C.green }}>{pct(t.margin)}</b></div>
+              <div className="fin-muted small">Margen del año: <b style={{ color: C.cash }}>{pct(t.margin)}</b></div>
             </div>
           </div>
         </div>
         <div className="fin-hero-chart">
-          <Label right={<span className="fin-legend"><i style={{ background: C.amber }} />Facturado <i style={{ background: C.green }} />Cobrado</span>}>ACUMULADO_DEL_AÑO</Label>
+          <Label right={<span className="fin-legend"><i style={{ background: C.billed }} />Facturado <i style={{ background: C.cash }} />Cobrado</span>}>Acumulado del año</Label>
           <Cumulative months={data.months} />
         </div>
       </section>
@@ -263,10 +264,10 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
           </nav>
           <section className="fin-kpis" key={m.key}>
             {[
-              { l: 'FACTURACIÓN', v: m.billed, p: prev?.billed, c: C.amber },
-              { l: 'CASH_COLLECTED', v: m.cash, p: prev?.cash, c: C.green },
-              { l: 'GASTOS_DIRECTOS', v: m.direct, p: prev?.direct, c: C.cyan, invert: true },
-              { l: 'PROFIT_REPARTIBLE', v: m.distributable, p: prev?.distributable, c: m.distributable >= 0 ? C.green : C.red },
+              { l: 'Facturación', v: m.billed, p: prev?.billed, c: C.fees },
+              { l: 'Cash collected', v: m.cash, p: prev?.cash, c: C.cash },
+              { l: 'Gastos directos', v: m.direct, p: prev?.direct, c: C.ink, invert: true },
+              { l: 'Profit repartible', v: m.distributable, p: prev?.distributable, c: m.distributable >= 0 ? C.cash : C.neg },
             ].map((k) => (
               <div key={k.l} className="fin-card fin-kpi" style={{ ['--k' as string]: k.c }}>
                 <Label>{k.l}</Label>
@@ -275,7 +276,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
               </div>
             ))}
             <div className="fin-card fin-kpi">
-              <Label>MARGEN</Label>
+              <Label>Margen</Label>
               <div className="fin-kpi-v"><Count value={(m.margin ?? 0) * 100} ms={900} format={(n) => (m.margin == null ? '—' : `${Math.round(n)}%`)} /></div>
               <span className="fin-muted small">{m.pending > 0 ? `${usd(m.pending)} pendiente de cobro` : 'Todo cobrado'}</span>
             </div>
@@ -283,11 +284,11 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
 
           <section className="fin-two">
             <div className="fin-card">
-              <Label right={<span className="fin-legend"><i style={{ background: C.amber }} />Facturado <i style={{ background: C.green }} />Cobrado</span>}>FACTURADO_VS_COBRADO</Label>
+              <Label right={<span className="fin-legend"><i style={{ background: C.billed }} />Facturado <i style={{ background: C.cash }} />Cobrado</span>}>Facturado y cobrado</Label>
               <Bars months={data.months} sel={m.key} onSel={setSel} />
             </div>
             <div className="fin-card">
-              <Label right={<span className="fin-muted small">{m.name}</span>}>CASCADA_DEL_MES</Label>
+              <Label right={<span className="fin-muted small">{m.name}</span>}>Cascada del mes</Label>
               <Waterfall m={m} />
             </div>
           </section>
@@ -296,7 +297,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
 
       <section className="fin-two">
         <div className="fin-card">
-          <Label right={<span className="fin-legend">{CAT.map((c) => <span key={c.k}><i style={{ background: c.c }} />{c.l}</span>)}</span>}>GASTOS_DEL_NEGOCIO</Label>
+          <Label right={<span className="fin-legend">{CAT.map((c) => <span key={c.k}><i style={{ background: c.c }} />{c.l}</span>)}</span>}>Gastos del negocio</Label>
           <Spend months={data.months} />
           <div className="fin-split">
             {catTotals.map((c) => (
@@ -309,7 +310,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
           </div>
         </div>
         <div className="fin-card">
-          <Label>SOFTWARE_TOP</Label>
+          <Label>Software</Label>
           <ul className="fin-list">
             {data.topSoftware.map((s) => (
               <li key={s.name}><span>{s.name}</span><b>{usd(s.amount)}</b></li>
@@ -318,7 +319,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
           </ul>
           {m && (
             <>
-              <Label right={<span className="fin-muted small">{m.name}</span>}>GASTOS_DEL_MES</Label>
+              <Label right={<span className="fin-muted small">{m.name}</span>}>Gastos del mes</Label>
               <ul className="fin-list compact">
                 {m.expenses.slice(0, 8).map((e, i) => (
                   <li key={i}><span>{e.detail} <em>{e.category}</em></span><b>{usd(e.amount)}</b></li>
@@ -331,7 +332,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
 
       <section className="fin-two">
         <div className="fin-card">
-          <Label>CLIENTES_POR_FACTURACIÓN</Label>
+          <Label>Clientes por facturación</Label>
           <ul className="fin-clients">
             {data.clients.map((c, i) => (
               <li key={c.name}>
@@ -346,14 +347,14 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
           </ul>
         </div>
         <div className="fin-card">
-          <Label>PENDIENTE_DE_COBRO</Label>
+          <Label>Pendiente de cobro</Label>
           <ul className="fin-list">
             {pendings.map((p, i) => (
-              <li key={i}><span>{p.client} <em>{p.month}</em></span><b style={{ color: C.amber }}>{usd(p.billed)}</b></li>
+              <li key={i}><span>{p.client} <em>{p.month}</em></span><b style={{ color: 'var(--warn)' }}>{usd(p.billed)}</b></li>
             ))}
             {!pendings.length && <li className="fin-muted">No hay cobros pendientes.</li>}
           </ul>
-          <Label>TRIMESTRES_{data.year}</Label>
+          <Label>Trimestres {data.year}</Label>
           <div className="fin-q">
             {data.quarters.map((qq) => (
               <div key={qq.q} className={qq.months ? '' : 'off'}>
