@@ -46,8 +46,16 @@ export interface FinanceData {
 const round = (n: number) => Math.round(n * 100) / 100;
 
 
+/** Mismo cliente con otro nombre en la planilla. */
+const CLIENT_ALIASES: Record<string, string> = { marcela: 'Brainzeed', 'marcela pezet': 'Brainzeed' };
+/** Mismo software con otro nombre. */
+const SOFTWARE_ALIASES: Record<string, string> = { 'notion labs': 'Notion', manychat: 'ManyChat', 'chat gpt': 'OpenAI', chatgpt: 'OpenAI' };
+
 /** "Andy & Exe (pago 1 de 2)" → "Andy & Exe" */
-const clientName = (s: string) => s.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const clientName = (s: string) => {
+  const n = s.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return CLIENT_ALIASES[n.toLowerCase()] ?? n;
+};
 
 function category(tag: string): Expense['category'] {
   const t = tag.toLowerCase();
@@ -122,7 +130,8 @@ async function load(): Promise<FinanceData> {
 
   const sw = new Map<string, number>();
   for (const m of months) for (const e of m.expenses) if (e.category === 'Software') {
-    const k = e.detail.replace(/\s+/g, ' ').trim();
+    const raw = e.detail.replace(/\s+/g, ' ').trim();
+    const k = SOFTWARE_ALIASES[raw.toLowerCase()] ?? raw;
     sw.set(k, (sw.get(k) ?? 0) + e.amount);
   }
   const topSoftware = [...sw.entries()].map(([name, amount]) => ({ name, amount: round(amount) })).sort((a, b) => b.amount - a.amount).slice(0, 8);

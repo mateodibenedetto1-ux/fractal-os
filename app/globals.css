@@ -810,7 +810,7 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .fin-wf-bar { position: absolute; left: 18%; right: 18%; border-radius: 4px; transition: height .8s cubic-bezier(.2,.8,.2,1); }
 .fin-wf-bar.step { opacity: .85; }
 .fin-wf-v { font-family: var(--mono); font-size: 11px; color: var(--f-ink); white-space: nowrap; }
-.fin-wf .fin-axis-l { font-size: 8.5px; letter-spacing: .06em; }
+.fin-wf .fin-axis-l { font-size: 8.5px; letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 .fin-split { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .fin-split > div { display: flex; flex-direction: column; gap: 4px; }

@@ -135,9 +135,9 @@ function Waterfall({ m }: { m: Month }) {
     { l: 'Cobrado', v: m.cash, kind: 'total', c: C.green },
     { l: 'Equipo', v: -m.team, kind: 'step', c: C.cyan },
     { l: 'Software', v: -m.software, kind: 'step', c: C.violet },
-    { l: 'Comisiones', v: -(m.fees + m.other), kind: 'step', c: C.amber },
+    { l: 'Comis.', v: -(m.fees + m.other), kind: 'step', c: C.amber },
     { l: 'Profit', v: m.profit, kind: 'total', c: m.profit >= 0 ? C.green : C.red },
-    { l: 'Caja chica', v: -m.pettyCash, kind: 'step', c: C.grey },
+    { l: 'Caja', v: -m.pettyCash, kind: 'step', c: C.grey },
     { l: 'Repartible', v: m.distributable, kind: 'total', c: m.distributable >= 0 ? C.green : C.red },
   ];
   const top = Math.max(1, m.cash, m.profit);
@@ -201,7 +201,9 @@ function Spend({ months }: { months: Month[] }) {
 export function FinanceDashboard({ data }: { data: FinanceData }) {
   const withData = data.months.filter((m) => m.tab);
   const last = withData[withData.length - 1];
-  const [sel, setSel] = useState(last?.key ?? '');
+  // Por defecto el último mes con cobros (el mes en curso suele estar sin cobrar todavía)
+  const closed = [...withData].reverse().find((x) => x.cash > 0) ?? last;
+  const [sel, setSel] = useState(closed?.key ?? '');
   const [busy, setBusy] = useState(false);
   const m = data.months.find((x) => x.key === sel) ?? last;
   const prev = m ? withData[withData.findIndex((x) => x.key === m.key) - 1] : undefined;
@@ -357,7 +359,12 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
               <div key={qq.q} className={qq.months ? '' : 'off'}>
                 <span className="fin-q-name">{qq.q}</span>
                 <b>{qq.months ? kfmt(qq.billed) : '—'}</b>
-                <span className="fin-muted small">{qq.months ? `cobrado ${kfmt(qq.cash)} · profit ${kfmt(qq.profit)}` : 'sin datos'}</span>
+                {qq.months ? (
+                  <>
+                    <span className="fin-muted small">cobrado {kfmt(qq.cash)}</span>
+                    <span className="fin-muted small">profit {kfmt(qq.profit)}</span>
+                  </>
+                ) : <span className="fin-muted small">sin datos</span>}
               </div>
             ))}
           </div>
