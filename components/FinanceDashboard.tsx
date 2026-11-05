@@ -264,7 +264,7 @@ export function FinanceDashboard({ data }: { data: FinanceData }) {
           </nav>
           <section className="fin-kpis" key={m.key}>
             {[
-              { l: 'Facturación', v: m.billed, p: prev?.billed, c: C.fees },
+              { l: 'Facturación', v: m.billed, p: prev?.billed, c: C.billed },
               { l: 'Cash collected', v: m.cash, p: prev?.cash, c: C.cash },
               { l: 'Gastos directos', v: m.direct, p: prev?.direct, c: C.ink, invert: true },
               { l: 'Profit repartible', v: m.distributable, p: prev?.distributable, c: m.distributable >= 0 ? C.cash : C.neg },
