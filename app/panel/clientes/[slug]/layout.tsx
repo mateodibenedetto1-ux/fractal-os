@@ -25,6 +25,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
         <NavLink href={base} exact>Resumen</NavLink>
         {org.segment === 'consulting' && <NavLink href={`${base}/cerebro`}>Segundo cerebro</NavLink>}
         {org.segment === 'consulting' && <NavLink href={`${base}/ia`}>Fractal IA</NavLink>}
+        <NavLink href={`${base}/contenido`}>Contenido</NavLink>
         <NavLink href={`${base}/accionables`}>Accionables</NavLink>
         <NavLink href={`${base}/llamadas`}>Llamadas</NavLink>
         <NavLink href={`${base}/recursos`}>Recursos</NavLink>

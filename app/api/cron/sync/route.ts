@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { pushDirtyActions, syncAtlasFromNotion, syncOrgFromNotion } from '@/lib/sync';
 import { backfillTeamCalls } from '@/lib/process';
+import { syncAllInstagram } from '@/lib/instagram';
 import type { Org } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -29,5 +30,6 @@ export async function GET(req: Request) {
   }
   const atlas = await syncAtlasFromNotion(sb);
   const teamCalls = await backfillTeamCalls(sb);
-  return NextResponse.json({ ok: true, pushed, clients, atlas, teamCalls });
+  const instagram = await syncAllInstagram(sb);
+  return NextResponse.json({ ok: true, pushed, clients, atlas, teamCalls, instagram });
 }
