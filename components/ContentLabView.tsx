@@ -125,7 +125,7 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
               <span className="fin-delta up">{lab.followers.delta30 != null ? `${lab.followers.delta30 >= 0 ? '+' : ''}${fmt(lab.followers.delta30)} en 30 días` : 'La evolución arranca desde la conexión'}</span>
             </div>
             {([
-              ['Vistas', 'views'], ['Alcance', 'reach'], ['Interacciones', 'interactions'], ['Seguidores generados', 'follows'],
+              ['Vistas', 'views'], ['Alcance', 'reach'], ['Interacciones', 'interactions'], ['Guardados', 'saved'], ['Compartidos', 'shares'],
             ] as [string, keyof Window][]).map(([l, k]) => (
               <div key={k} className="fin-card fin-kpi">
                 <div className="fin-label">{l}</div>
@@ -145,7 +145,7 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
                     <span className="fin-bar-val">{m.views ? kfmt(m.views) : '—'}</span>
                     <span className="fin-bar-pair"><span className="fin-bar b" style={{ height: mounted ? `${(m.views / maxMonth) * 100}%` : 0, transitionDelay: `${i * 60}ms`, width: 'min(26px, 50%)' }} /></span>
                     <span className="fin-axis-l">{m.label}</span>
-                    <span className="ct-sub">{m.follows ? `+${fmt(m.follows)} seg.` : `${m.posts} piezas`}</span>
+                    <span className="ct-sub">{m.posts} {m.posts === 1 ? 'pieza' : 'piezas'}</span>
                   </div>
                 ))}
               </div>
@@ -192,7 +192,7 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
                   </div>
                   <div className="ct-nums">
                     <span className={sort === 'views' ? 'on' : ''}><b>{kfmt(m.views ?? 0)}</b>vistas</span>
-                    <span className={sort === 'follows' ? 'on' : ''}><b>{m.follows == null ? '—' : fmt(m.follows)}</b>seguidores</span>
+                    <span className={sort === 'follows' ? 'on' : ''} title="Instagram solo lo informa para posts y carruseles"><b>{m.follows == null ? '—' : fmt(m.follows)}</b>seguidores</span>
                     <span className={sort === 'saved' ? 'on' : ''}><b>{fmt(m.saved)}</b>guardados</span>
                     <span className={sort === 'shares' ? 'on' : ''}><b>{fmt(m.shares)}</b>compartidos</span>
                     <span className={sort === 'rate' ? 'on' : ''}><b>{pct(m.rate)}</b>interacción</span>

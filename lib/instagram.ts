@@ -226,25 +226,28 @@ export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { p
     // Piezas: hasta `pages` páginas de 25 (las más recientes primero)
     let url: string | null = `${hostOf(kind)}/${kind === 'ig' ? 'me' : igId}/media?${new URLSearchParams({ fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp', limit: '25', access_token: token })}`;
     let count = 0;
-    for (let page = 0; url && page < (opts.pages ?? 2); page++) {
+    for (let page = 0; url && page < (opts.pages ?? 4); page++) {
       const j: { data: any[]; paging?: { next?: string } } = await ig(url);
-      for (const m of j.data) {
-        const product = m.media_product_type === 'REELS' ? 'REELS' : 'FEED';
-        const ins = await mediaInsights(m.id, product, token, kind);
-        const row = {
-          id: m.id, org_id: orgId, caption: m.caption ?? null, media_type: m.media_type, product_type: m.media_product_type ?? product,
-          permalink: m.permalink, thumbnail: m.thumbnail_url ?? (m.media_type === 'IMAGE' || m.media_type === 'CAROUSEL_ALBUM' ? m.media_url : null) ?? null,
-          posted_at: m.timestamp,
-          views: n(ins.views), reach: n(ins.reach), likes: n(ins.likes), comments: n(ins.comments), saved: n(ins.saved), shares: n(ins.shares),
-          interactions: n(ins.total_interactions), follows: n(ins.follows), profile_visits: n(ins.profile_visits),
-          avg_watch_ms: n(ins.ig_reels_avg_watch_time), updated_at: new Date().toISOString(),
-        };
-        await sb.from('ig_media').upsert(row);
-        // Foto de las piezas de los últimos 30 días, para ver la curva
-        if (Date.now() - new Date(m.timestamp).getTime() < 30 * 86_400_000) {
-          await sb.from('ig_media_snapshots').insert({ media_id: m.id, views: row.views, reach: row.reach, interactions: row.interactions, follows: row.follows });
-        }
-        count++;
+      // Se leen de a 6 piezas en paralelo para no pasarse del tiempo de la función
+      for (let i = 0; i < j.data.length; i += 6) {
+        await Promise.all(j.data.slice(i, i + 6).map(async (m: any) => {
+          const product = m.media_product_type === 'REELS' ? 'REELS' : 'FEED';
+          const ins = await mediaInsights(m.id, product, token, kind);
+          const row = {
+            id: m.id, org_id: orgId, caption: m.caption ?? null, media_type: m.media_type, product_type: m.media_product_type ?? product,
+            permalink: m.permalink, thumbnail: m.thumbnail_url ?? (m.media_type === 'IMAGE' || m.media_type === 'CAROUSEL_ALBUM' ? m.media_url : null) ?? null,
+            posted_at: m.timestamp,
+            views: n(ins.views), reach: n(ins.reach), likes: n(ins.likes), comments: n(ins.comments), saved: n(ins.saved), shares: n(ins.shares),
+            interactions: n(ins.total_interactions), follows: n(ins.follows), profile_visits: n(ins.profile_visits),
+            avg_watch_ms: n(ins.ig_reels_avg_watch_time), updated_at: new Date().toISOString(),
+          };
+          await sb.from('ig_media').upsert(row);
+          // Foto de las piezas de los últimos 30 días, para ver la curva
+          if (Date.now() - new Date(m.timestamp).getTime() < 30 * 86_400_000) {
+            await sb.from('ig_media_snapshots').insert({ media_id: m.id, views: row.views, reach: row.reach, interactions: row.interactions, follows: row.follows });
+          }
+          count++;
+        }));
       }
       url = j.paging?.next ?? null;
     }

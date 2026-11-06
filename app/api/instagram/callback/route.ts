@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   try {
     const sb = supabaseAdmin();
     await connectAccount(sb, state.o, v.id, url.searchParams.get('code') ?? '', url.searchParams.get('selected_business_id') ?? url.searchParams.get('business_id'));
-    after(() => syncInstagram(sb, state.o, { pages: 4 }));
+    after(() => syncInstagram(sb, state.o, { pages: 6 }));
     return go('ig=ok');
   } catch (e) {
     const extra = [...url.searchParams.keys()].filter((k) => !['code', 'state'].includes(k)).join(',');

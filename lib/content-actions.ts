@@ -13,7 +13,7 @@ async function guard(orgId: string) {
 /** Trae las métricas de Instagram ahora. */
 export async function syncContentNow(orgId: string) {
   await guard(orgId);
-  const r = await syncInstagram(supabaseAdmin(), orgId, { pages: 2 });
+  const r = await syncInstagram(supabaseAdmin(), orgId, { pages: 6 });
   revalidatePath('/', 'layout');
   return r;
 }
