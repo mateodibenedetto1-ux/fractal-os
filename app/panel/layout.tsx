@@ -11,6 +11,7 @@ const NAV = [
   { href: '/panel', label: 'Home', icon: 'home', exact: true },
   { href: '/panel/clientes', label: 'Clientes', icon: 'users' },
   { href: '/panel/ia', label: 'Fractal IA', icon: 'spark' },
+  { href: '/panel/contenido', label: 'Contenido', icon: 'play' },
   { href: '/panel/tareas', label: 'Tareas', icon: 'check' },
   { href: '/panel/calendario', label: 'Calendario', icon: 'calendar' },
   { href: '/panel/objetivos', label: 'Objetivos', icon: 'target' },

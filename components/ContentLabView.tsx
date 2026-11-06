@@ -54,11 +54,11 @@ const SORTS: { k: SortKey; l: string }[] = [
 ];
 
 interface Props {
-  lab: ContentLab; orgId: string; orgName: string; staff: boolean;
+  lab: ContentLab; orgId: string; orgName: string; staff: boolean; own?: boolean;
   connectHref: string; ready: boolean; notice?: string; noticeKind: 'ok' | 'err';
 }
 
-export function ContentLabView({ lab, orgId, orgName, staff, connectHref, ready, notice, noticeKind }: Props) {
+export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, ready, notice, noticeKind }: Props) {
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<SortKey>('views');
   const [err, setErr] = useState<string | null>(null);
@@ -103,10 +103,11 @@ export function ContentLabView({ lab, orgId, orgName, staff, connectHref, ready,
           <div>
             <h2>Conectá tu Instagram</h2>
             <p className="fin-muted">
-              {staff ? `Cuando ${orgName} conecte su cuenta (o la conectes vos con su acceso)` : 'Cuando conectes tu cuenta'}, vas a ver acá qué contenido trae vistas, cuál trae seguidores y cuál genera conversaciones, mes a mes.
+              {own ? 'Conectá la cuenta de Instagram de Fractal (o la tuya) y' : staff ? `Cuando ${orgName} conecte su cuenta (o la conectes vos con su acceso)` : 'Cuando conectes tu cuenta'}{own ? '' : ','} vas a ver acá qué contenido trae vistas, cuál trae seguidores y cuál genera conversaciones, mes a mes.
             </p>
             <ul className="ct-steps">
               <li>La cuenta tiene que ser <b>profesional</b> (creador o empresa) y estar en un portfolio comercial de Meta.</li>
+              {own && <li>En la ventana de Facebook marcá <b>una sola</b> cuenta de Instagram: la que querés ver acá.</li>}
               <li>Solo leemos métricas. No publicamos ni cambiamos nada.</li>
               <li>Podés desconectarla cuando quieras desde esta misma pantalla.</li>
             </ul>

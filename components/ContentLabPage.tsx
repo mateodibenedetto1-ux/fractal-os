@@ -13,7 +13,7 @@ const MSG: Record<string, string> = {
 };
 
 /** Laboratorio de contenido de un cliente (portal y panel). El acceso ya lo validó el layout. */
-export async function ContentLabPage({ org, base, staff, ig, msg }: { org: Org; base: string; staff: boolean; ig?: string; msg?: string }) {
+export async function ContentLabPage({ org, base, staff, own, ig, msg }: { org: Org; base: string; staff: boolean; own?: boolean; ig?: string; msg?: string }) {
   if (DEMO) return <div className="panel panel-pad">No disponible en modo demo.</div>;
   const lab = await getContentLab(org.id);
   // Si la última lectura tiene más de 3 horas, se actualiza en segundo plano
@@ -26,6 +26,7 @@ export async function ContentLabPage({ org, base, staff, ig, msg }: { org: Org; 
       orgId={org.id}
       orgName={org.name}
       staff={staff}
+      own={own}
       connectHref={`/api/instagram/connect?org=${org.id}&back=${encodeURIComponent(`${base}/contenido`)}`}
       ready={igReady()}
       notice={notice}
