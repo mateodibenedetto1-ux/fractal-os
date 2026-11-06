@@ -172,40 +172,44 @@ export function ContentDashboard({ lab, tab, days }: { lab: ContentLab; tab: Das
     const val = (m: ContentLab['media'][number]) =>
       sort === 'rate' ? m.rate ?? -1 : sort === 'dayFollowers' ? dayF.get(m.posted_at.slice(0, 10)) ?? -1 : (m[sort] as number | null) ?? -1;
     const list = [...media].sort((a, b) => val(b) - val(a));
+    const cols = SORTS.filter((c) => c.k !== 'follows' || media.some((m) => m.follows != null));
     return (
       <section className="fin-card">
-        <div className="fin-label"><span>{list.length} piezas en los últimos {days} días</span><i /></div>
-        <div className="fin-months ct-sorts" role="group" aria-label="Ordenar por">
-          {SORTS.map((x) => <button key={x.k} className={sort === x.k ? 'on' : ''} onClick={() => setSort(x.k)} aria-pressed={sort === x.k}>{x.l}</button>)}
+        <div className="fin-label"><span>{list.length} piezas en los últimos {days} días</span><i /><span className="fin-muted small">tocá una columna para ordenar</span></div>
+        <div className="ct-table-wrap">
+          <table className="ct-table">
+            <thead>
+              <tr>
+                <th>#</th><th>Pieza</th>
+                {cols.map((c) => <th key={c.k} className={sort === c.k ? 'on' : ''}><button onClick={() => setSort(c.k)}>{c.l}</button></th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((m, i) => {
+                const d = m.posted_at.slice(0, 10);
+                const df = dayF.get(d);
+                const v: Record<SortKey, string> = {
+                  views: kfmt(m.views), reach: kfmt(m.reach), dayFollowers: df == null ? '—' : `+${fmt(df)}`, follows: m.follows == null ? '—' : fmt(m.follows),
+                  likes: kfmt(m.likes), comments: kfmt(m.comments), reposts: kfmt(m.reposts), shares: kfmt(m.shares), saved: kfmt(m.saved), rate: pct(m.rate),
+                };
+                return (
+                  <tr key={m.id}>
+                    <td className="ct-pos">{i + 1}</td>
+                    <td>
+                      <a className="ct-piece" href={m.permalink ?? '#'} target="_blank" rel="noreferrer">
+                        {m.thumbnail ? <img src={m.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="ct-noimg" />}
+                        <span><b>{(m.caption ?? 'Sin texto').split('\n')[0].slice(0, 60)}</b><em>{m.format} · {dlabel(d)}{(postsByDay.get(d)?.length ?? 0) > 1 ? ' · día compartido' : ''}</em></span>
+                      </a>
+                    </td>
+                    {cols.map((c) => <td key={c.k} className={`${sort === c.k ? 'on' : ''} ${c.k === 'dayFollowers' && df ? 'ok' : ''}`}>{v[c.k]}</td>)}
+                  </tr>
+                );
+              })}
+              {!list.length && <tr><td colSpan={cols.length + 2} className="fin-muted">No hay piezas publicadas en este período.</td></tr>}
+            </tbody>
+          </table>
         </div>
-        <ol className="ct-rank ct-rank-full">
-          {list.map((m, i) => {
-            const df = dayF.get(m.posted_at.slice(0, 10));
-            const cells: [SortKey, string, string][] = [
-              ['views', kfmt(m.views), 'vistas'], ['reach', kfmt(m.reach), 'alcance'],
-              ['dayFollowers', df == null ? '—' : `+${fmt(df)}`, 'seg. del día'], ['follows', m.follows == null ? '—' : fmt(m.follows), 'seg. pieza'],
-              ['likes', kfmt(m.likes), 'likes'], ['comments', kfmt(m.comments), 'coment.'], ['reposts', kfmt(m.reposts), 'reposts'],
-              ['shares', kfmt(m.shares), 'compart.'], ['saved', kfmt(m.saved), 'guardados'], ['rate', pct(m.rate), 'interacción'],
-            ];
-            return (
-              <li key={m.id}>
-                <span className="ct-pos">{i + 1}</span>
-                <a className="ct-thumb" href={m.permalink ?? '#'} target="_blank" rel="noreferrer" aria-label="Ver en Instagram">
-                  {m.thumbnail ? <img src={m.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span />}
-                </a>
-                <div className="ct-body">
-                  <div className="ct-cap">{(m.caption ?? 'Sin texto').split('\n')[0].slice(0, 110)}</div>
-                  <div className="fin-muted small">{m.format} · {dlabel(m.posted_at.slice(0, 10))}{(postsByDay.get(m.posted_at.slice(0, 10))?.length ?? 0) > 1 ? ' · se publicó más de una pieza ese día' : ''}</div>
-                </div>
-                <div className="ct-nums ct-nums-full">
-                  {cells.map(([k, v, l]) => <span key={k} className={sort === k ? 'on' : ''}><b>{v}</b>{l}</span>)}
-                </div>
-              </li>
-            );
-          })}
-          {!list.length && <li className="fin-muted">No hay piezas publicadas en este período.</li>}
-        </ol>
-        <p className="fin-foot">"Seg. del día" son los seguidores que ganó la cuenta el día que salió la pieza: sirve para comparar una pieza con la anterior. "Seg. pieza" es el dato exacto de Instagram, que solo existe para posts y carruseles.</p>
+        <p className="fin-foot">"Seguidores del día" son los seguidores que ganó la cuenta el día que salió la pieza: sirve para comparar una pieza con la anterior. Instagram no da los seguidores exactos de cada reel; cuando los da (posts y carruseles), aparece la columna "Seguidores (pieza)".</p>
       </section>
     );
   }

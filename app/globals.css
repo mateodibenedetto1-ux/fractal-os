@@ -903,3 +903,21 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .ct-split-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
 .ct-split-row b { font-weight: 500; font-variant-numeric: tabular-nums; }
 .ct-split .fin-meter > span { background: var(--brand); transition: width .8s var(--ease); animation: none; }
+.ct-table-wrap { overflow-x: auto; margin: 0 -4px; }
+.ct-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ct-table th { text-align: right; font-weight: 400; white-space: nowrap; padding: 0 0 8px; border-bottom: 1px solid var(--line-soft); }
+.ct-table th:nth-child(-n+2) { text-align: left; font-size: 11px; color: var(--muted); }
+.ct-table th button { font: inherit; font-size: 11px; color: var(--muted); background: none; border: 0; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.ct-table th button:hover { color: var(--ink); }
+.ct-table th.on button { color: var(--brand-ink); background: var(--brand); }
+.ct-table td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+.ct-table td:nth-child(-n+2) { text-align: left; }
+.ct-table td.on { color: var(--brand); font-weight: 500; }
+.ct-table td.ok { color: var(--ok); }
+.ct-table tr:last-child td { border-bottom: 0; }
+.ct-table .ct-pos { color: var(--muted); width: 20px; }
+.ct-piece { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; min-width: 240px; max-width: 340px; }
+.ct-piece img, .ct-noimg { width: 34px; height: 44px; object-fit: cover; border-radius: 5px; flex: none; background: var(--line-soft); }
+.ct-piece > span { display: flex; flex-direction: column; min-width: 0; }
+.ct-piece b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.ct-piece em { font-style: normal; font-size: 11px; color: var(--muted); }
