@@ -63,18 +63,34 @@ async function ig<T = any>(url: string, init?: RequestInit): Promise<T> {
   return j as T;
 }
 
-/** Busca la cuenta de Instagram que el cliente compartió en el login. */
+/** Busca la cuenta de Instagram que se compartió en el login. Prueba varias vías y, si ninguna funciona, devuelve qué respondió Meta. */
 async function findInstagram(token: string): Promise<string> {
-  // Configuración con token de usuario del sistema: cuentas asignadas
+  const tried: string[] = [];
+  // 1) Los permisos del token dicen sobre qué cuentas se dieron (target_ids de instagram_basic)
   try {
-    const j = await ig<{ data: { id: string }[] }>(`${GRAPH}/me/assigned_instagram_accounts?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
-    if (j.data?.[0]?.id) return j.data[0].id;
-  } catch { /* se prueba por páginas */ }
-  // Alternativa: cuenta de Instagram vinculada a una página de Facebook
-  const j = await ig<{ data: { instagram_business_account?: { id: string } }[] }>(`${GRAPH}/me/accounts?${new URLSearchParams({ fields: 'instagram_business_account{id,username}', access_token: token })}`);
-  const id = j.data?.find((p) => p.instagram_business_account)?.instagram_business_account?.id;
-  if (!id) throw new Error('No encontramos una cuenta de Instagram en el acceso que diste. Volvé a conectar y elegí la cuenta de Instagram.');
-  return id;
+    const app = `${process.env.INSTAGRAM_APP_ID}|${process.env.INSTAGRAM_APP_SECRET}`;
+    const d = await ig<{ data: { granular_scopes?: { scope: string; target_ids?: string[] }[] } }>(`${GRAPH}/debug_token?${new URLSearchParams({ input_token: token, access_token: app })}`);
+    const scopes = d.data.granular_scopes ?? [];
+    const id = (scopes.find((x) => x.scope === 'instagram_basic') ?? scopes.find((x) => x.scope === 'instagram_manage_insights'))?.target_ids?.[0];
+    if (id) return id;
+    tried.push(`debug_token: sin cuentas (${scopes.map((x) => x.scope).join(', ') || 'sin permisos'})`);
+  } catch (e) { tried.push(`debug_token: ${(e as Error).message}`); }
+  // 2) Cuentas asignadas al usuario del sistema
+  for (const path of ['me/assigned_instagram_accounts', 'me/instagram_accounts']) {
+    try {
+      const j = await ig<{ data: { id: string }[] }>(`${GRAPH}/${path}?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
+      if (j.data?.[0]?.id) return j.data[0].id;
+      tried.push(`${path}: vacío`);
+    } catch (e) { tried.push(`${path}: ${(e as Error).message}`); }
+  }
+  // 3) Cuenta vinculada a una página de Facebook
+  try {
+    const j = await ig<{ data: { instagram_business_account?: { id: string } }[] }>(`${GRAPH}/me/accounts?${new URLSearchParams({ fields: 'instagram_business_account{id,username}', access_token: token })}`);
+    const id = j.data?.find((p) => p.instagram_business_account)?.instagram_business_account?.id;
+    if (id) return id;
+    tried.push('me/accounts: sin cuenta de Instagram');
+  } catch (e) { tried.push(`me/accounts: ${(e as Error).message}`); }
+  throw new Error(`No encontramos la cuenta de Instagram en el acceso. Detalle para soporte: ${tried.join(' | ')}`);
 }
 
 /** code → token (del sistema, no vence) + cuenta de Instagram, guardado cifrado. */
