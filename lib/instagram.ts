@@ -64,7 +64,7 @@ async function ig<T = any>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** Busca la cuenta de Instagram que se compartió en el login. Prueba varias vías y, si ninguna funciona, devuelve qué respondió Meta. */
-async function findInstagram(token: string): Promise<string> {
+async function findInstagram(token: string, hint?: string | null): Promise<string> {
   const tried: string[] = [];
   // 1) Los permisos del token dicen sobre qué cuentas se dieron (target_ids de instagram_basic)
   try {
@@ -83,7 +83,30 @@ async function findInstagram(token: string): Promise<string> {
       tried.push(`${path}: vacío`);
     } catch (e) { tried.push(`${path}: ${(e as Error).message}`); }
   }
-  // 3) Cuenta vinculada a una página de Facebook
+  // 3) Por el portfolio comercial al que pertenece el usuario del sistema
+  const businesses: string[] = [];
+  if (hint) businesses.push(hint);
+  for (const q of [`me?fields=id,name,business{id}`, `me/businesses?fields=id,name`]) {
+    try {
+      const j = await ig<any>(`${GRAPH}/${q}&${new URLSearchParams({ access_token: token })}`);
+      if (j.business?.id) businesses.push(j.business.id);
+      for (const b of j.data ?? []) if (b.id) businesses.push(b.id);
+      tried.push(`${q.split('?')[0]}: ${j.business?.id ?? (j.data ?? []).map((b: any) => b.id).join(',') ?? '-'}`);
+    } catch (e) { tried.push(`${q.split('?')[0]}: ${(e as Error).message}`); }
+  }
+  for (const b of [...new Set(businesses)]) {
+    for (const edge of ['owned_instagram_assets', 'instagram_business_accounts', 'owned_instagram_accounts', 'instagram_accounts', 'client_instagram_assets']) {
+      try {
+        const j = await ig<{ data: any[] }>(`${GRAPH}/${b}/${edge}?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
+        const first = j.data?.[0];
+        if (first?.id) {
+          // Algunas vías devuelven el id "viejo" de Instagram: se valida pidiendo el perfil
+          try { await profile(token, first.id); return first.id; } catch (e) { tried.push(`${b}/${edge}: id ${first.id} no sirve (${(e as Error).message})`); }
+        } else tried.push(`${b}/${edge}: vacío`);
+      } catch (e) { tried.push(`${b}/${edge}: ${(e as Error).message}`); }
+    }
+  }
+  // 4) Cuenta vinculada a una página de Facebook
   try {
     const j = await ig<{ data: { instagram_business_account?: { id: string } }[] }>(`${GRAPH}/me/accounts?${new URLSearchParams({ fields: 'instagram_business_account{id,username}', access_token: token })}`);
     const id = j.data?.find((p) => p.instagram_business_account)?.instagram_business_account?.id;
@@ -94,14 +117,14 @@ async function findInstagram(token: string): Promise<string> {
 }
 
 /** code → token (del sistema, no vence) + cuenta de Instagram, guardado cifrado. */
-export async function connectAccount(sb: SupabaseClient, orgId: string, userId: string, code: string) {
+export async function connectAccount(sb: SupabaseClient, orgId: string, userId: string, code: string, businessHint?: string | null) {
   const t = await ig<{ access_token: string; expires_in?: number }>(`${GRAPH}/oauth/access_token?${new URLSearchParams({
     client_id: process.env.INSTAGRAM_APP_ID!,
     client_secret: process.env.INSTAGRAM_APP_SECRET!,
     redirect_uri: igRedirect(),
     code,
   })}`);
-  const igId = await findInstagram(t.access_token);
+  const igId = await findInstagram(t.access_token, businessHint);
   const me = await profile(t.access_token, igId);
   const { error } = await sb.from('ig_accounts').upsert({
     org_id: orgId,
