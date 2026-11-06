@@ -11,16 +11,16 @@ async function guard(orgId: string) {
 }
 
 /** Trae las métricas de Instagram ahora. */
-export async function syncContentNow(orgId: string) {
+export async function syncContentNow(orgId: string, igUserId: string) {
   await guard(orgId);
-  const r = await syncInstagram(supabaseAdmin(), orgId, { pages: 6 });
+  const r = await syncInstagram(supabaseAdmin(), orgId, igUserId, { pages: 6 });
   revalidatePath('/', 'layout');
   return r;
 }
 
 /** Desconecta Instagram: borra el token. Las métricas ya guardadas quedan. */
-export async function disconnectInstagram(orgId: string) {
+export async function disconnectInstagram(orgId: string, igUserId: string) {
   await guard(orgId);
-  await supabaseAdmin().from('ig_accounts').delete().eq('org_id', orgId);
+  await supabaseAdmin().from('ig_accounts').delete().eq('org_id', orgId).eq('ig_user_id', igUserId);
   revalidatePath('/', 'layout');
 }

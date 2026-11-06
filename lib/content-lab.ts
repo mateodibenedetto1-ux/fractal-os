@@ -2,7 +2,7 @@ import 'server-only';
 import { supabaseAdmin } from './supabase/admin';
 
 export interface IgAccount {
-  username: string | null; name: string | null; picture: string | null; account_type: string | null;
+  ig_user_id: string; username: string | null; name: string | null; picture: string | null; account_type: string | null;
   followers: number | null; media_count: number | null; connected_at: string; last_sync_at: string | null; last_error: string | null;
 }
 export interface IgMedia {
@@ -21,8 +21,10 @@ export interface PeriodSummary {
   views_by_type: Record<string, number>; views_by_follow: Record<string, number>;
 }
 export interface DailyRow { day: string; views: number | null; reach: number | null; engaged: number | null; new_followers: number | null; followers: number | null }
+export interface AccountChip { ig_user_id: string; username: string | null; picture: string | null; followers: number | null }
 export interface ContentLab {
   account: IgAccount | null;
+  accounts: AccountChip[];
   media: (IgMedia & { format: Format; rate: number | null })[];
   last30: Window; prev30: Window;
   followers: { now: number | null; delta30: number | null; series: { day: string; v: number }[] };
@@ -48,12 +50,17 @@ function win(list: IgMedia[]): Window {
 }
 
 /** Lee todo lo del laboratorio de un cliente. Llamar solo después de validar el acceso a ese cliente. */
-export async function getContentLab(orgId: string): Promise<ContentLab> {
+export async function getContentLab(orgId: string, wanted?: string | null): Promise<ContentLab> {
   const sb = supabaseAdmin();
+  // Cuentas del cliente: se muestra la pedida (?cuenta=) o la primera que se conectó
+  const { data: chips } = await sb.from('ig_accounts').select('ig_user_id, username, picture, followers').eq('org_id', orgId).order('connected_at');
+  const accounts = (chips ?? []) as AccountChip[];
+  const pick = accounts.find((a) => a.ig_user_id === wanted || a.username === wanted) ?? accounts[0];
+  const igId = pick?.ig_user_id ?? '__none__';
   const [{ data: acc }, { data: media }, { data: daily }] = await Promise.all([
-    sb.from('ig_accounts').select('username, name, picture, account_type, followers, media_count, connected_at, last_sync_at, last_error, summary').eq('org_id', orgId).maybeSingle(),
-    sb.from('ig_media').select('*').eq('org_id', orgId).order('posted_at', { ascending: false }).limit(200),
-    sb.from('ig_daily').select('day, followers, views, reach, engaged, new_followers').eq('org_id', orgId).gte('day', new Date(Date.now() - 31 * DAY).toISOString().slice(0, 10)).order('day'),
+    sb.from('ig_accounts').select('ig_user_id, username, name, picture, account_type, followers, media_count, connected_at, last_sync_at, last_error, summary').eq('org_id', orgId).eq('ig_user_id', igId).maybeSingle(),
+    sb.from('ig_media').select('*').eq('org_id', orgId).eq('ig_user_id', igId).order('posted_at', { ascending: false }).limit(200),
+    sb.from('ig_daily').select('day, followers, views, reach, engaged, new_followers').eq('org_id', orgId).eq('ig_user_id', igId).gte('day', new Date(Date.now() - 31 * DAY).toISOString().slice(0, 10)).order('day'),
   ]);
   const list = ((media ?? []) as IgMedia[]).map((m) => ({ ...m, format: formatOf(m), rate: m.reach ? (m.interactions ?? 0) / m.reach : null }));
   const now = Date.now();
@@ -83,6 +90,7 @@ export async function getContentLab(orgId: string): Promise<ContentLab> {
   const { summary, ...account } = (acc ?? {}) as IgAccount & { summary?: ContentLab['summary'] };
   return {
     account: acc ? (account as IgAccount) : null,
+    accounts,
     daily: dailyRows,
     summary: summary ?? null,
     media: list,

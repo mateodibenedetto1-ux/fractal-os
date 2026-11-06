@@ -19,9 +19,9 @@ export async function GET(req: Request) {
   if (!v || v.id !== state.u) return go('ig=error&msg=' + encodeURIComponent('Iniciá sesión con la misma cuenta y volvé a intentar.'));
   try {
     const sb = supabaseAdmin();
-    await connectAccount(sb, state.o, v.id, url.searchParams.get('code') ?? '', url.searchParams.get('selected_business_id') ?? url.searchParams.get('business_id'));
-    after(() => syncInstagram(sb, state.o, { pages: 6 }));
-    return go('ig=ok');
+    const accounts = await connectAccount(sb, state.o, v.id, url.searchParams.get('code') ?? '', url.searchParams.get('selected_business_id') ?? url.searchParams.get('business_id'));
+    after(async () => { for (const a of accounts) await syncInstagram(sb, state.o, a.id, { pages: 6 }); });
+    return go(`ig=ok&n=${accounts.length}&cuenta=${encodeURIComponent(accounts[0].username ?? accounts[0].id)}`);
   } catch (e) {
     const extra = [...url.searchParams.keys()].filter((k) => !['code', 'state'].includes(k)).join(',');
     return go('ig=error&msg=' + encodeURIComponent((e instanceof Error ? e.message : 'No se pudo conectar') + (extra ? ` | params: ${extra}` : '')));

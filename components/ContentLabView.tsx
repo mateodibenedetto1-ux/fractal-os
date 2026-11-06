@@ -55,11 +55,11 @@ const SORTS: { k: SortKey; l: string }[] = [
 ];
 
 interface Props {
-  lab: ContentLab; orgId: string; orgName: string; staff: boolean; own?: boolean;
+  lab: ContentLab; orgId: string; orgName: string; base: string; staff: boolean; own?: boolean;
   connectHref: string; ready: boolean; notice?: string; noticeKind: 'ok' | 'err';
 }
 
-export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, ready, notice, noticeKind }: Props) {
+export function ContentLabView({ lab, orgId, orgName, base, staff, own, connectHref, ready, notice, noticeKind }: Props) {
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<SortKey>('views');
   const [err, setErr] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
 
   const refresh = async () => {
     setBusy(true); setErr(null);
-    try { const r = await syncContentNow(orgId); if (!r.ok) setErr(r.error ?? 'No se pudo actualizar.'); }
+    try { const r = await syncContentNow(orgId, a!.ig_user_id); if (!r.ok) setErr(r.error ?? 'No se pudo actualizar.'); }
     finally { setBusy(false); }
   };
 
@@ -93,10 +93,22 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
           <div className="fin-head-actions">
             <span className="fin-muted">Actualizado {ago(a.last_sync_at)}</span>
             <button className="fin-btn" onClick={refresh} disabled={busy}>{busy ? 'Leyendo Instagram…' : 'Actualizar'}</button>
-            <button className="fin-btn" onClick={async () => { if (confirm('¿Desconectar Instagram? Las métricas guardadas quedan.')) await disconnectInstagram(orgId); }}>Desconectar</button>
+            <button className="fin-btn" onClick={async () => { if (confirm(`¿Desconectar @${a.username}?`)) { await disconnectInstagram(orgId, a.ig_user_id); location.href = base; } }}>Desconectar</button>
           </div>
         )}
       </header>
+
+      {a && (
+        <nav className="ct-accounts" aria-label="Cuentas de Instagram">
+          {lab.accounts.map((x) => (
+            <a key={x.ig_user_id} href={`${base}?cuenta=${encodeURIComponent(x.username ?? x.ig_user_id)}`} className={x.ig_user_id === a.ig_user_id ? 'on' : ''} aria-current={x.ig_user_id === a.ig_user_id ? 'page' : undefined}>
+              {x.picture ? <img src={x.picture} alt="" referrerPolicy="no-referrer" /> : <span className="ct-noimg" />}
+              <span><b>@{x.username ?? 'cuenta'}</b><em>{x.followers != null ? `${kfmt(x.followers)} seguidores` : ''}</em></span>
+            </a>
+          ))}
+          {ready && <a className="ct-add" href={connectHref}>+ Conectar otra cuenta</a>}
+        </nav>
+      )}
 
       {notice && <div className={`ct-notice ${noticeKind}`} role="status">{notice}</div>}
       {(err || a?.last_error) && <div className="ct-notice err" role="alert">Instagram respondió: {err ?? a?.last_error}</div>}
@@ -110,7 +122,7 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
             </p>
             <ul className="ct-steps">
               <li>La cuenta tiene que ser <b>profesional</b> (creador o empresa) y estar en un portfolio comercial de Meta.</li>
-              {own && <li>En la ventana de Facebook marcá <b>una sola</b> cuenta de Instagram: la que querés ver acá.</li>}
+              <li>En la ventana de Facebook marcá las cuentas de Instagram que querés ver acá. Si son varias, cada una queda con su propio tablero.</li>
               <li>Solo leemos métricas. No publicamos ni cambiamos nada.</li>
               <li>Podés desconectarla cuando quieras desde esta misma pantalla.</li>
             </ul>

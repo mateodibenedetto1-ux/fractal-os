@@ -921,3 +921,13 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .ct-piece > span { display: flex; flex-direction: column; min-width: 0; }
 .ct-piece b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
 .ct-piece em { font-style: normal; font-size: 11px; color: var(--muted); }
+.ct-accounts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ct-accounts a { display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 1px solid var(--line-soft); border-radius: 99px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .15s; }
+.ct-accounts a:hover { border-color: var(--muted); }
+.ct-accounts a.on { border-color: var(--brand); }
+.ct-accounts img, .ct-accounts .ct-noimg { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+.ct-accounts a > span { display: flex; flex-direction: column; line-height: 1.2; }
+.ct-accounts b { font-size: 13px; font-weight: 500; }
+.ct-accounts em { font-style: normal; font-size: 11px; color: var(--muted); }
+.ct-accounts a.ct-add { padding: 10px 16px; color: var(--muted); border-style: dashed; font-size: 13px; }
+.ct-accounts a.ct-add:hover { color: var(--ink); }
