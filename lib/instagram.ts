@@ -79,29 +79,36 @@ async function findInstagram(token: string, hint?: string | null): Promise<{ id:
   // 1) Los permisos del token dicen sobre qué cuentas se dieron (target_ids de instagram_basic)
   try {
     const app = `${process.env.INSTAGRAM_APP_ID}|${process.env.INSTAGRAM_APP_SECRET}`;
-    const d = await ig<{ data: { granular_scopes?: { scope: string; target_ids?: string[] }[] } }>(`${GRAPH}/debug_token?${new URLSearchParams({ input_token: token, access_token: app })}`);
-    const scopes = d.data.granular_scopes ?? [];
+    const d = await ig<{ data: any }>(`${GRAPH}/debug_token?${new URLSearchParams({ input_token: token, access_token: app })}`);
+    const scopes: { scope: string; target_ids?: string[] }[] = d.data.granular_scopes ?? [];
+    tried.push(`token: type=${d.data.type ?? '-'} user=${d.data.user_id ?? '-'} profile=${d.data.profile_id ?? '-'}`);
     const id = (scopes.find((x) => x.scope === 'instagram_basic') ?? scopes.find((x) => x.scope === 'instagram_manage_insights'))?.target_ids?.[0];
     if (id) return { id, kind: 'fb' };
     tried.push(`debug_token: sin cuentas (${scopes.map((x) => x.scope).join(', ') || 'sin permisos'})`);
   } catch (e) { tried.push(`debug_token: ${(e as Error).message}`); }
   // 2) Cuentas asignadas al usuario del sistema
-  for (const path of ['me/assigned_instagram_accounts', 'me/instagram_accounts']) {
+  // Meta asigna la cuenta al usuario del sistema unos segundos después del login: se reintenta
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const j = await ig<{ data: { id: string }[] }>(`${GRAPH}/${path}?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
-      if (j.data?.[0]?.id) return { id: j.data[0].id, kind: 'fb' };
-      tried.push(`${path}: vacío`);
-    } catch (e) { tried.push(`${path}: ${(e as Error).message}`); }
+      const j = await ig<{ data: any[] }>(`${GRAPH}/me/assigned_instagram_accounts?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
+      const first = j.data?.[0];
+      if (first?.id) {
+        try { await profile(token, first.id, 'fb'); return { id: first.id, kind: 'fb' }; }
+        catch (e) { tried.push(`assigned ${first.id} (${first.username ?? '-'}): perfil falla (${(e as Error).message})`); break; }
+      }
+      if (attempt === 3) tried.push('me/assigned_instagram_accounts: vacío tras 4 intentos');
+    } catch (e) { tried.push(`me/assigned_instagram_accounts: ${(e as Error).message}`); break; }
+    await new Promise((r) => setTimeout(r, 2500));
   }
   // 3) Por el portfolio comercial al que pertenece el usuario del sistema
   const businesses: string[] = [];
   if (hint) businesses.push(hint);
-  for (const q of [`me?fields=id,name,business{id}`, `me/businesses?fields=id,name`]) {
+  for (const q of [`me?fields=id,name,client_business_id`, `me/businesses?fields=id,name`]) {
     try {
       const j = await ig<any>(`${GRAPH}/${q}&${new URLSearchParams({ access_token: token })}`);
-      if (j.business?.id) businesses.push(j.business.id);
+      if (j.client_business_id) businesses.push(String(j.client_business_id));
       for (const b of j.data ?? []) if (b.id) businesses.push(b.id);
-      tried.push(`${q.split('?')[0]}: ${j.business?.id ?? (j.data ?? []).map((b: any) => b.id).join(',') ?? '-'}`);
+      tried.push(`${q.split('?')[0]}: ${j.client_business_id ?? ((j.data ?? []).map((b: any) => b.id).join(',') || '-')}`);
     } catch (e) { tried.push(`${q.split('?')[0]}: ${(e as Error).message}`); }
   }
   for (const b of [...new Set(businesses)]) {
