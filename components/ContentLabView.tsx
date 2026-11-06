@@ -106,7 +106,7 @@ export function ContentLabView({ lab, orgId, orgName, staff, connectHref, ready,
               {staff ? `Cuando ${orgName} conecte su cuenta (o la conectes vos con su acceso)` : 'Cuando conectes tu cuenta'}, vas a ver acá qué contenido trae vistas, cuál trae seguidores y cuál genera conversaciones, mes a mes.
             </p>
             <ul className="ct-steps">
-              <li>La cuenta tiene que ser <b>profesional</b> (creador o empresa).</li>
+              <li>La cuenta tiene que ser <b>profesional</b> (creador o empresa) y estar en un portfolio comercial de Meta.</li>
               <li>Solo leemos métricas. No publicamos ni cambiamos nada.</li>
               <li>Podés desconectarla cuando quieras desde esta misma pantalla.</li>
             </ul>

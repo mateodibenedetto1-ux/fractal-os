@@ -5,14 +5,16 @@ import { APP_URL, SUPABASE_SERVICE } from './env';
 import { decrypt, encrypt } from './secrets';
 
 /**
- * Instagram API con inicio de sesión de Instagram (cuentas profesionales).
- * Permisos: instagram_business_basic + instagram_business_manage_insights.
+ * Instagram API con "Unified login" (Facebook Login for Business con config_id), que es lo único
+ * que Meta habilita para apps nuevas. La configuración usa un token de usuario del sistema que no vence,
+ * con el activo "Instagram account" y los permisos instagram_basic + instagram_manage_insights.
  * Los datos de Meta pueden tardar hasta 48 h y se guardan hasta 2 años.
+ * Variables: INSTAGRAM_APP_ID (ID de la app de Meta), INSTAGRAM_APP_SECRET, INSTAGRAM_CONFIG_ID.
  */
-const GRAPH = 'https://graph.instagram.com/v23.0';
-const SCOPES = ['instagram_business_basic', 'instagram_business_manage_insights'];
+const V = 'v23.0';
+const GRAPH = `https://graph.facebook.com/${V}`;
 
-export const igReady = () => Boolean(process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET);
+export const igReady = () => Boolean(process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET && process.env.INSTAGRAM_CONFIG_ID);
 export const igRedirect = () => `${APP_URL}/api/instagram/callback`;
 
 // ---------- OAuth ----------
@@ -39,14 +41,16 @@ export function readState(state: string): { o: string; u: string; b: string } | 
 }
 
 export function authorizeUrl(state: string) {
+  // Con config_id no se manda scope: los permisos y activos los define la configuración
   const p = new URLSearchParams({
     client_id: process.env.INSTAGRAM_APP_ID!,
     redirect_uri: igRedirect(),
+    config_id: process.env.INSTAGRAM_CONFIG_ID!,
     response_type: 'code',
-    scope: SCOPES.join(','),
+    override_default_response_type: 'true',
     state,
   });
-  return `https://www.instagram.com/oauth/authorize?${p}`;
+  return `https://www.facebook.com/${V}/dialog/oauth?${p}`;
 }
 
 async function ig<T = any>(url: string, init?: RequestInit): Promise<T> {
@@ -59,54 +63,50 @@ async function ig<T = any>(url: string, init?: RequestInit): Promise<T> {
   return j as T;
 }
 
-/** code → token de larga duración (60 días) + datos de la cuenta, guardado cifrado. */
+/** Busca la cuenta de Instagram que el cliente compartió en el login. */
+async function findInstagram(token: string): Promise<string> {
+  // Configuración con token de usuario del sistema: cuentas asignadas
+  try {
+    const j = await ig<{ data: { id: string }[] }>(`${GRAPH}/me/assigned_instagram_accounts?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
+    if (j.data?.[0]?.id) return j.data[0].id;
+  } catch { /* se prueba por páginas */ }
+  // Alternativa: cuenta de Instagram vinculada a una página de Facebook
+  const j = await ig<{ data: { instagram_business_account?: { id: string } }[] }>(`${GRAPH}/me/accounts?${new URLSearchParams({ fields: 'instagram_business_account{id,username}', access_token: token })}`);
+  const id = j.data?.find((p) => p.instagram_business_account)?.instagram_business_account?.id;
+  if (!id) throw new Error('No encontramos una cuenta de Instagram en el acceso que diste. Volvé a conectar y elegí la cuenta de Instagram.');
+  return id;
+}
+
+/** code → token (del sistema, no vence) + cuenta de Instagram, guardado cifrado. */
 export async function connectAccount(sb: SupabaseClient, orgId: string, userId: string, code: string) {
-  const short = await ig<{ access_token: string; user_id: number | string }>('https://api.instagram.com/oauth/access_token', {
-    method: 'POST',
-    body: new URLSearchParams({
-      client_id: process.env.INSTAGRAM_APP_ID!,
-      client_secret: process.env.INSTAGRAM_APP_SECRET!,
-      grant_type: 'authorization_code',
-      redirect_uri: igRedirect(),
-      code: code.replace(/#_$/, ''),
-    }),
-  });
-  const long = await ig<{ access_token: string; expires_in: number }>(
-    `https://graph.instagram.com/access_token?${new URLSearchParams({ grant_type: 'ig_exchange_token', client_secret: process.env.INSTAGRAM_APP_SECRET!, access_token: short.access_token })}`,
-  );
-  const me = await profile(long.access_token);
-  if (me.account_type && !['BUSINESS', 'MEDIA_CREATOR', 'CREATOR'].includes(me.account_type)) {
-    throw new Error('La cuenta tiene que ser profesional (de creador o de empresa) para ver métricas.');
-  }
+  const t = await ig<{ access_token: string; expires_in?: number }>(`${GRAPH}/oauth/access_token?${new URLSearchParams({
+    client_id: process.env.INSTAGRAM_APP_ID!,
+    client_secret: process.env.INSTAGRAM_APP_SECRET!,
+    redirect_uri: igRedirect(),
+    code,
+  })}`);
+  const igId = await findInstagram(t.access_token);
+  const me = await profile(t.access_token, igId);
   const { error } = await sb.from('ig_accounts').upsert({
     org_id: orgId,
-    ig_user_id: String(me.user_id ?? me.id ?? short.user_id),
-    username: me.username, name: me.name ?? null, picture: me.profile_picture_url ?? null, account_type: me.account_type ?? null,
+    ig_user_id: igId,
+    username: me.username, name: me.name ?? null, picture: me.profile_picture_url ?? null, account_type: 'BUSINESS',
     followers: me.followers_count ?? null, follows: me.follows_count ?? null, media_count: me.media_count ?? null,
-    token: encrypt(long.access_token),
-    token_expires_at: new Date(Date.now() + long.expires_in * 1000).toISOString(),
+    token: encrypt(t.access_token),
+    token_expires_at: t.expires_in ? new Date(Date.now() + t.expires_in * 1000).toISOString() : null,
     connected_by: userId, connected_at: new Date().toISOString(), last_error: null,
   });
   if (error) throw new Error(error.message);
   return me.username as string;
 }
 
-function profile(token: string) {
-  return ig<any>(`${GRAPH}/me?${new URLSearchParams({ fields: 'user_id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count', access_token: token })}`);
+function profile(token: string, igId: string) {
+  return ig<any>(`${GRAPH}/${igId}?${new URLSearchParams({ fields: 'username,name,profile_picture_url,followers_count,follows_count,media_count', access_token: token })}`);
 }
 
-/** Renueva el token si vence en menos de 10 días (los tokens duran 60). */
-async function freshToken(sb: SupabaseClient, acc: { org_id: string; token: string; token_expires_at: string | null }) {
-  let token = decrypt(acc.token);
-  const left = acc.token_expires_at ? new Date(acc.token_expires_at).getTime() - Date.now() : 0;
-  if (left < 10 * 86_400_000) {
-    const r = await ig<{ access_token: string; expires_in: number }>(
-      `https://graph.instagram.com/refresh_access_token?${new URLSearchParams({ grant_type: 'ig_refresh_token', access_token: token })}`,
-    );
-    token = r.access_token;
-    await sb.from('ig_accounts').update({ token: encrypt(token), token_expires_at: new Date(Date.now() + r.expires_in * 1000).toISOString() }).eq('org_id', acc.org_id);
-  }
-  return token;
+/** El token de usuario del sistema no vence; si Meta lo invalida, el sync guarda el error y se reconecta. */
+function tokenOf(acc: { token: string }) {
+  return decrypt(acc.token);
 }
 
 // ---------- Sincronización ----------
@@ -137,12 +137,12 @@ async function mediaInsights(id: string, product: string, token: string) {
   }
 }
 
-async function accountDay(token: string, since: number, until: number) {
+async function accountDay(token: string, igId: string, since: number, until: number) {
   const out: Record<string, number | null> = {};
   for (const m of ['reach', 'views', 'accounts_engaged', 'total_interactions', 'profile_views']) {
     try {
       const j = await ig<{ data: { name: string; total_value?: { value: number }; values?: { value: number }[] }[] }>(
-        `${GRAPH}/me/insights?${new URLSearchParams({ metric: m, period: 'day', metric_type: 'total_value', since: String(since), until: String(until), access_token: token })}`,
+        `${GRAPH}/${igId}/insights?${new URLSearchParams({ metric: m, period: 'day', metric_type: 'total_value', since: String(since), until: String(until), access_token: token })}`,
       );
       out[m] = j.data[0]?.total_value?.value ?? j.data[0]?.values?.[0]?.value ?? null;
     } catch { out[m] = null; }
@@ -154,18 +154,19 @@ const n = (v: unknown) => (typeof v === 'number' ? Math.round(v) : null);
 
 /** Trae perfil, últimas piezas con métricas y el día de la cuenta. */
 export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { pages?: number } = {}) {
-  const { data: acc } = await sb.from('ig_accounts').select('org_id, token, token_expires_at').eq('org_id', orgId).maybeSingle();
+  const { data: acc } = await sb.from('ig_accounts').select('org_id, ig_user_id, token').eq('org_id', orgId).maybeSingle();
   if (!acc) return { ok: false, error: 'Sin cuenta conectada' };
   try {
-    const token = await freshToken(sb, acc);
-    const me = await profile(token);
+    const token = tokenOf(acc);
+    const igId = acc.ig_user_id as string;
+    const me = await profile(token, igId);
     await sb.from('ig_accounts').update({
       username: me.username, name: me.name ?? null, picture: me.profile_picture_url ?? null,
       followers: me.followers_count ?? null, follows: me.follows_count ?? null, media_count: me.media_count ?? null,
     }).eq('org_id', orgId);
 
     // Piezas: hasta `pages` páginas de 25 (las más recientes primero)
-    let url: string | null = `${GRAPH}/me/media?${new URLSearchParams({ fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp', limit: '25', access_token: token })}`;
+    let url: string | null = `${GRAPH}/${igId}/media?${new URLSearchParams({ fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp', limit: '25', access_token: token })}`;
     let count = 0;
     for (let page = 0; url && page < (opts.pages ?? 2); page++) {
       const j: { data: any[]; paging?: { next?: string } } = await ig(url);
@@ -193,7 +194,7 @@ export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { p
     // Día de cuenta: ayer completo + seguidores de hoy
     const today = new Date();
     const y = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1));
-    const day = await accountDay(token, Math.floor(y.getTime() / 1000), Math.floor(y.getTime() / 1000) + 86_400);
+    const day = await accountDay(token, igId, Math.floor(y.getTime() / 1000), Math.floor(y.getTime() / 1000) + 86_400);
     await sb.from('ig_daily').upsert({ org_id: orgId, day: y.toISOString().slice(0, 10), reach: n(day.reach), views: n(day.views), engaged: n(day.accounts_engaged), interactions: n(day.total_interactions), profile_views: n(day.profile_views) });
     await sb.from('ig_daily').upsert({ org_id: orgId, day: today.toISOString().slice(0, 10), followers: me.followers_count ?? null }, { onConflict: 'org_id,day', ignoreDuplicates: false });
 
