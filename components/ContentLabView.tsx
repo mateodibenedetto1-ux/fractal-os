@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { disconnectInstagram, syncContentNow } from '@/lib/content-actions';
 import type { ContentLab, Window } from '@/lib/content-lab';
+import { ContentDashboard, type DashTab } from './ContentDashboard';
 
 const fmt = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('es-AR'));
 const kfmt = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M` : n >= 1000 ? `${(n / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })}K` : fmt(n));
@@ -62,6 +63,8 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<SortKey>('views');
   const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<'resumen' | DashTab>('rendimiento');
+  const [days, setDays] = useState<7 | 30>(30);
   const mounted = useMounted();
   const a = lab.account;
 
@@ -118,6 +121,20 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
         </section>
       ) : (
         <>
+          <div className="ct-tabs-row">
+            <nav className="ct-tabs" aria-label="Secciones">
+              {([['rendimiento', 'Rendimiento'], ['contenido', 'Contenido'], ['audiencia', 'Audiencia'], ['resumen', 'Mes a mes']] as const).map(([k, l]) => (
+                <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)} aria-pressed={tab === k}>{l}</button>
+              ))}
+            </nav>
+            {tab !== 'resumen' && (
+              <div className="fin-months" role="group" aria-label="Período">
+                {([7, 30] as const).map((d) => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)} aria-pressed={days === d}>{d} días</button>)}
+              </div>
+            )}
+          </div>
+          {tab !== 'resumen' ? <ContentDashboard lab={lab} tab={tab} days={days} /> : (
+          <>
           <section className="fin-kpis ct-kpis">
             <div className="fin-card fin-kpi">
               <div className="fin-label">Seguidores</div>
@@ -202,6 +219,8 @@ export function ContentLabView({ lab, orgId, orgName, staff, own, connectHref, r
               {!ranked.length && <li className="fin-muted">Todavía no hay piezas. La primera lectura tarda un par de minutos.</li>}
             </ol>
           </section>
+          </>
+          )}
         </>
       )}
     </div>

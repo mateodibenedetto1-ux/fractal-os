@@ -170,8 +170,9 @@ function tokenOf(acc: { token: string }) {
 
 /** Métricas por tipo: pedir una que no aplica devuelve error, así que van separadas. */
 const MEDIA_METRICS: Record<string, string[]> = {
-  REELS: ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'ig_reels_avg_watch_time'],
-  FEED: ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'follows', 'profile_visits'],
+  // follows/profile_visits en reels: si Meta no lo da, se omite solo (ver el fallback de abajo)
+  REELS: ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'ig_reels_avg_watch_time', 'reposts', 'follows', 'profile_visits'],
+  FEED: ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'follows', 'profile_visits', 'reposts'],
 };
 
 async function mediaInsights(id: string, product: string, token: string, kind?: string | null) {
@@ -194,20 +195,93 @@ async function mediaInsights(id: string, product: string, token: string, kind?: 
   }
 }
 
-async function accountDay(token: string, igId: string, since: number, until: number, kind?: string | null) {
-  const out: Record<string, number | null> = {};
-  for (const m of ['reach', 'views', 'accounts_engaged', 'total_interactions', 'profile_views']) {
-    try {
-      const j = await ig<{ data: { name: string; total_value?: { value: number }; values?: { value: number }[] }[] }>(
-        `${hostOf(kind)}/${kind === 'ig' ? 'me' : igId}/insights?${new URLSearchParams({ metric: m, period: 'day', metric_type: 'total_value', since: String(since), until: String(until), access_token: token })}`,
-      );
-      out[m] = j.data[0]?.total_value?.value ?? j.data[0]?.values?.[0]?.value ?? null;
-    } catch { out[m] = null; }
-  }
-  return out;
+const n = (v: unknown) => (typeof v === 'number' ? Math.round(v) : null);
+const DAYS = 86_400;
+const dayStart = (offset: number) => { const t = new Date(); return Math.floor(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - offset) / 1000); };
+const isoDay = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 10);
+
+type Breakdown = Record<string, number>;
+/** Lee una métrica total_value (con breakdown opcional) de la cuenta en un rango. */
+async function accountTotal(token: string, base: string, metric: string, since: number, until: number, breakdown?: string) {
+  const p: Record<string, string> = { metric, period: 'day', metric_type: 'total_value', since: String(since), until: String(until), access_token: token };
+  if (breakdown) p.breakdown = breakdown;
+  const j = await ig<{ data: { total_value?: { value?: number; breakdowns?: { results?: { dimension_values: string[]; value: number }[] }[] } }[] }>(`${base}/insights?${new URLSearchParams(p)}`);
+  const tv = j.data[0]?.total_value;
+  const parts: Breakdown = {};
+  for (const r of tv?.breakdowns?.[0]?.results ?? []) parts[r.dimension_values.join(' · ')] = r.value;
+  return { value: tv?.value ?? null, parts };
 }
 
-const n = (v: unknown) => (typeof v === 'number' ? Math.round(v) : null);
+/**
+ * Métricas de cuenta para el dashboard (Rendimiento y Audiencia):
+ * - por día de los últimos 30 días: vistas, alcance, cuentas que interactuaron y seguidores ganados
+ * - por período (7 y 30 días): totales, follows/unfollows, vistas por tipo de contenido y por seguidor/no seguidor
+ * - demografía de seguidores
+ */
+async function syncAccountInsights(sb: SupabaseClient, orgId: string, token: string, igId: string, kind: string | null) {
+  const base = `${hostOf(kind)}/${kind === 'ig' ? 'me' : igId}`;
+  const errors: string[] = [];
+  const safe = async <T,>(label: string, fn: () => Promise<T>): Promise<T | null> => {
+    try { return await fn(); } catch (e) { errors.push(`${label}: ${(e as Error).message}`); return null; }
+  };
+
+  // Días que faltan (los últimos 30), y siempre ayer y anteayer porque Meta consolida tarde
+  const { data: have } = await sb.from('ig_daily').select('day').eq('org_id', orgId).not('views', 'is', null).gte('day', isoDay(dayStart(30)));
+  const got = new Set((have ?? []).map((d) => d.day));
+  const missing = Array.from({ length: 30 }, (_, i) => dayStart(i + 1)).filter((d, i) => i < 2 || !got.has(isoDay(d)));
+  for (let i = 0; i < missing.length; i += 5) {
+    await Promise.all(missing.slice(i, i + 5).map(async (d) => {
+      const [views, reach, engaged] = await Promise.all(['views', 'reach', 'accounts_engaged'].map((m) => safe(m, () => accountTotal(token, base, m, d, d + DAYS))));
+      await sb.from('ig_daily').upsert({ org_id: orgId, day: isoDay(d), views: n(views?.value), reach: n(reach?.value), engaged: n(engaged?.value) });
+    }));
+  }
+
+  // Seguidores ganados por día (Meta da los últimos 30 días)
+  await safe('follower_count', async () => {
+    const j = await ig<{ data: { values?: { value: number; end_time: string }[] }[] }>(`${base}/insights?${new URLSearchParams({ metric: 'follower_count', period: 'day', since: String(dayStart(29)), until: String(dayStart(0)), access_token: token })}`);
+    for (const v of j.data[0]?.values ?? []) {
+      const day = isoDay(Math.floor(new Date(v.end_time).getTime() / 1000) - DAYS);
+      await sb.from('ig_daily').upsert({ org_id: orgId, day, new_followers: v.value });
+    }
+  });
+
+  // Resumen por período
+  const window = async (days: number) => {
+    const since = dayStart(days), until = dayStart(0);
+    const t = (m: string, b?: string) => safe(`${m}${b ? `/${b}` : ''} ${days}d`, () => accountTotal(token, base, m, since, until, b));
+    const [views, reach, interactions, likes, comments, shares, saves, reposts, profile, follows, byType, byFollow] = await Promise.all([
+      t('views'), t('reach'), t('total_interactions'), t('likes'), t('comments'), t('shares'), t('saves'), t('reposts'), t('profile_views'),
+      t('follows_and_unfollows', 'follow_type'), t('views', 'media_product_type'), t('views', 'follow_type'),
+    ]);
+    const fu = follows?.parts ?? {};
+    return {
+      views: views?.value ?? null, reach: reach?.value ?? null, interactions: interactions?.value ?? null,
+      likes: likes?.value ?? null, comments: comments?.value ?? null, shares: shares?.value ?? null, saves: saves?.value ?? null,
+      reposts: reposts?.value ?? null, profile_views: profile?.value ?? null,
+      follows: fu.FOLLOWER ?? null, unfollows: fu.NON_FOLLOWER ?? null,
+      views_by_type: byType?.parts ?? {}, views_by_follow: byFollow?.parts ?? {},
+    };
+  };
+  const [d7, d30] = await Promise.all([window(7), window(30)]);
+
+  // Demografía de seguidores
+  const demo: Record<string, Breakdown> = {};
+  await Promise.all(['age', 'gender', 'country', 'city'].map(async (b) => {
+    for (const timeframe of ['this_month', 'last_30_days', 'last_90_days']) {
+      try {
+        const j = await ig<{ data: { total_value?: { breakdowns?: { results?: { dimension_values: string[]; value: number }[] }[] } }[] }>(
+          `${base}/insights?${new URLSearchParams({ metric: 'follower_demographics', period: 'lifetime', metric_type: 'total_value', timeframe, breakdown: b, access_token: token })}`,
+        );
+        const parts: Breakdown = {};
+        for (const r of j.data[0]?.total_value?.breakdowns?.[0]?.results ?? []) parts[r.dimension_values.join(' · ')] = r.value;
+        demo[b] = parts;
+        return;
+      } catch (e) { if (timeframe === 'last_90_days') errors.push(`demografía ${b}: ${(e as Error).message}`); }
+    }
+  }));
+
+  await sb.from('ig_accounts').update({ summary: { d7, d30, demo, at: new Date().toISOString(), errors: errors.slice(0, 12) } }).eq('org_id', orgId);
+}
 
 /** Trae perfil, últimas piezas con métricas y el día de la cuenta. */
 export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { pages?: number } = {}) {
@@ -239,7 +313,7 @@ export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { p
             posted_at: m.timestamp,
             views: n(ins.views), reach: n(ins.reach), likes: n(ins.likes), comments: n(ins.comments), saved: n(ins.saved), shares: n(ins.shares),
             interactions: n(ins.total_interactions), follows: n(ins.follows), profile_visits: n(ins.profile_visits),
-            avg_watch_ms: n(ins.ig_reels_avg_watch_time), updated_at: new Date().toISOString(),
+            avg_watch_ms: n(ins.ig_reels_avg_watch_time), reposts: n(ins.reposts), updated_at: new Date().toISOString(),
           };
           await sb.from('ig_media').upsert(row);
           // Foto de las piezas de los últimos 30 días, para ver la curva
@@ -252,11 +326,9 @@ export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { p
       url = j.paging?.next ?? null;
     }
 
-    // Día de cuenta: ayer completo + seguidores de hoy
+    // Métricas de cuenta (día a día, por período y demografía) + seguidores de hoy
+    await syncAccountInsights(sb, orgId, token, igId, kind);
     const today = new Date();
-    const y = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1));
-    const day = await accountDay(token, igId, Math.floor(y.getTime() / 1000), Math.floor(y.getTime() / 1000) + 86_400, kind);
-    await sb.from('ig_daily').upsert({ org_id: orgId, day: y.toISOString().slice(0, 10), reach: n(day.reach), views: n(day.views), engaged: n(day.accounts_engaged), interactions: n(day.total_interactions), profile_views: n(day.profile_views) });
     await sb.from('ig_daily').upsert({ org_id: orgId, day: today.toISOString().slice(0, 10), followers: me.followers_count ?? null }, { onConflict: 'org_id,day', ignoreDuplicates: false });
 
     await sb.from('ig_accounts').update({ last_sync_at: new Date().toISOString(), last_error: null }).eq('org_id', orgId);
