@@ -13,6 +13,9 @@ import { decrypt, encrypt } from './secrets';
  */
 const V = 'v23.0';
 const GRAPH = `https://graph.facebook.com/${V}`;
+const IGRAPH = `https://graph.instagram.com/${V}`;
+/** Host según cómo resolvió la cuenta: 'ig' = API de Instagram, 'fb' = API de Facebook. */
+const hostOf = (kind: string | null | undefined) => (kind === 'ig' ? IGRAPH : GRAPH);
 
 export const igReady = () => Boolean(process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET && process.env.INSTAGRAM_CONFIG_ID);
 export const igRedirect = () => `${APP_URL}/api/instagram/callback`;
@@ -64,22 +67,29 @@ async function ig<T = any>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** Busca la cuenta de Instagram que se compartió en el login. Prueba varias vías y, si ninguna funciona, devuelve qué respondió Meta. */
-async function findInstagram(token: string, hint?: string | null): Promise<string> {
+async function findInstagram(token: string, hint?: string | null): Promise<{ id: string; kind: 'ig' | 'fb' }> {
   const tried: string[] = [];
+  // 0) Configuración compatible con el login de Instagram: el token sirve directo en graph.instagram.com
+  try {
+    const me = await ig<{ user_id?: string; id?: string; username?: string }>(`${IGRAPH}/me?${new URLSearchParams({ fields: 'user_id,username', access_token: token })}`);
+    const id = me.user_id ?? me.id;
+    if (id) return { id: String(id), kind: 'ig' };
+    tried.push('graph.instagram.com/me: sin id');
+  } catch (e) { tried.push(`graph.instagram.com/me: ${(e as Error).message}`); }
   // 1) Los permisos del token dicen sobre qué cuentas se dieron (target_ids de instagram_basic)
   try {
     const app = `${process.env.INSTAGRAM_APP_ID}|${process.env.INSTAGRAM_APP_SECRET}`;
     const d = await ig<{ data: { granular_scopes?: { scope: string; target_ids?: string[] }[] } }>(`${GRAPH}/debug_token?${new URLSearchParams({ input_token: token, access_token: app })}`);
     const scopes = d.data.granular_scopes ?? [];
     const id = (scopes.find((x) => x.scope === 'instagram_basic') ?? scopes.find((x) => x.scope === 'instagram_manage_insights'))?.target_ids?.[0];
-    if (id) return id;
+    if (id) return { id, kind: 'fb' };
     tried.push(`debug_token: sin cuentas (${scopes.map((x) => x.scope).join(', ') || 'sin permisos'})`);
   } catch (e) { tried.push(`debug_token: ${(e as Error).message}`); }
   // 2) Cuentas asignadas al usuario del sistema
   for (const path of ['me/assigned_instagram_accounts', 'me/instagram_accounts']) {
     try {
       const j = await ig<{ data: { id: string }[] }>(`${GRAPH}/${path}?${new URLSearchParams({ fields: 'id,username', access_token: token })}`);
-      if (j.data?.[0]?.id) return j.data[0].id;
+      if (j.data?.[0]?.id) return { id: j.data[0].id, kind: 'fb' };
       tried.push(`${path}: vacío`);
     } catch (e) { tried.push(`${path}: ${(e as Error).message}`); }
   }
@@ -101,7 +111,7 @@ async function findInstagram(token: string, hint?: string | null): Promise<strin
         const first = j.data?.[0];
         if (first?.id) {
           // Algunas vías devuelven el id "viejo" de Instagram: se valida pidiendo el perfil
-          try { await profile(token, first.id); return first.id; } catch (e) { tried.push(`${b}/${edge}: id ${first.id} no sirve (${(e as Error).message})`); }
+          try { await profile(token, first.id, 'fb'); return { id: first.id, kind: 'fb' }; } catch (e) { tried.push(`${b}/${edge}: id ${first.id} no sirve (${(e as Error).message})`); }
         } else tried.push(`${b}/${edge}: vacío`);
       } catch (e) { tried.push(`${b}/${edge}: ${(e as Error).message}`); }
     }
@@ -110,7 +120,7 @@ async function findInstagram(token: string, hint?: string | null): Promise<strin
   try {
     const j = await ig<{ data: { instagram_business_account?: { id: string } }[] }>(`${GRAPH}/me/accounts?${new URLSearchParams({ fields: 'instagram_business_account{id,username}', access_token: token })}`);
     const id = j.data?.find((p) => p.instagram_business_account)?.instagram_business_account?.id;
-    if (id) return id;
+    if (id) return { id, kind: 'fb' };
     tried.push('me/accounts: sin cuenta de Instagram');
   } catch (e) { tried.push(`me/accounts: ${(e as Error).message}`); }
   throw new Error(`No encontramos la cuenta de Instagram en el acceso. Detalle para soporte: ${tried.join(' | ')}`);
@@ -124,12 +134,13 @@ export async function connectAccount(sb: SupabaseClient, orgId: string, userId: 
     redirect_uri: igRedirect(),
     code,
   })}`);
-  const igId = await findInstagram(t.access_token, businessHint);
-  const me = await profile(t.access_token, igId);
+  const found = await findInstagram(t.access_token, businessHint);
+  const igId = found.id;
+  const me = await profile(t.access_token, igId, found.kind);
   const { error } = await sb.from('ig_accounts').upsert({
     org_id: orgId,
     ig_user_id: igId,
-    username: me.username, name: me.name ?? null, picture: me.profile_picture_url ?? null, account_type: 'BUSINESS',
+    username: me.username, name: me.name ?? null, picture: me.profile_picture_url ?? null, account_type: found.kind,
     followers: me.followers_count ?? null, follows: me.follows_count ?? null, media_count: me.media_count ?? null,
     token: encrypt(t.access_token),
     token_expires_at: t.expires_in ? new Date(Date.now() + t.expires_in * 1000).toISOString() : null,
@@ -139,8 +150,8 @@ export async function connectAccount(sb: SupabaseClient, orgId: string, userId: 
   return me.username as string;
 }
 
-function profile(token: string, igId: string) {
-  return ig<any>(`${GRAPH}/${igId}?${new URLSearchParams({ fields: 'username,name,profile_picture_url,followers_count,follows_count,media_count', access_token: token })}`);
+function profile(token: string, igId: string, kind?: string | null) {
+  return ig<any>(`${hostOf(kind)}/${kind === 'ig' ? 'me' : igId}?${new URLSearchParams({ fields: 'username,name,profile_picture_url,followers_count,follows_count,media_count', access_token: token })}`);
 }
 
 /** El token de usuario del sistema no vence; si Meta lo invalida, el sync guarda el error y se reconecta. */
@@ -156,11 +167,11 @@ const MEDIA_METRICS: Record<string, string[]> = {
   FEED: ['views', 'reach', 'likes', 'comments', 'saved', 'shares', 'total_interactions', 'follows', 'profile_visits'],
 };
 
-async function mediaInsights(id: string, product: string, token: string) {
+async function mediaInsights(id: string, product: string, token: string, kind?: string | null) {
   const metrics = MEDIA_METRICS[product] ?? MEDIA_METRICS.FEED;
   const read = async (list: string[]) => {
     const j = await ig<{ data: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] }>(
-      `${GRAPH}/${id}/insights?${new URLSearchParams({ metric: list.join(','), access_token: token })}`,
+      `${hostOf(kind)}/${id}/insights?${new URLSearchParams({ metric: list.join(','), access_token: token })}`,
     );
     return Object.fromEntries(j.data.map((m) => [m.name, m.total_value?.value ?? m.values?.[0]?.value ?? null]));
   };
@@ -176,12 +187,12 @@ async function mediaInsights(id: string, product: string, token: string) {
   }
 }
 
-async function accountDay(token: string, igId: string, since: number, until: number) {
+async function accountDay(token: string, igId: string, since: number, until: number, kind?: string | null) {
   const out: Record<string, number | null> = {};
   for (const m of ['reach', 'views', 'accounts_engaged', 'total_interactions', 'profile_views']) {
     try {
       const j = await ig<{ data: { name: string; total_value?: { value: number }; values?: { value: number }[] }[] }>(
-        `${GRAPH}/${igId}/insights?${new URLSearchParams({ metric: m, period: 'day', metric_type: 'total_value', since: String(since), until: String(until), access_token: token })}`,
+        `${hostOf(kind)}/${kind === 'ig' ? 'me' : igId}/insights?${new URLSearchParams({ metric: m, period: 'day', metric_type: 'total_value', since: String(since), until: String(until), access_token: token })}`,
       );
       out[m] = j.data[0]?.total_value?.value ?? j.data[0]?.values?.[0]?.value ?? null;
     } catch { out[m] = null; }
@@ -193,25 +204,26 @@ const n = (v: unknown) => (typeof v === 'number' ? Math.round(v) : null);
 
 /** Trae perfil, últimas piezas con métricas y el día de la cuenta. */
 export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { pages?: number } = {}) {
-  const { data: acc } = await sb.from('ig_accounts').select('org_id, ig_user_id, token').eq('org_id', orgId).maybeSingle();
+  const { data: acc } = await sb.from('ig_accounts').select('org_id, ig_user_id, token, account_type').eq('org_id', orgId).maybeSingle();
   if (!acc) return { ok: false, error: 'Sin cuenta conectada' };
   try {
     const token = tokenOf(acc);
     const igId = acc.ig_user_id as string;
-    const me = await profile(token, igId);
+    const kind = acc.account_type as string | null;
+    const me = await profile(token, igId, kind);
     await sb.from('ig_accounts').update({
       username: me.username, name: me.name ?? null, picture: me.profile_picture_url ?? null,
       followers: me.followers_count ?? null, follows: me.follows_count ?? null, media_count: me.media_count ?? null,
     }).eq('org_id', orgId);
 
     // Piezas: hasta `pages` páginas de 25 (las más recientes primero)
-    let url: string | null = `${GRAPH}/${igId}/media?${new URLSearchParams({ fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp', limit: '25', access_token: token })}`;
+    let url: string | null = `${hostOf(kind)}/${kind === 'ig' ? 'me' : igId}/media?${new URLSearchParams({ fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp', limit: '25', access_token: token })}`;
     let count = 0;
     for (let page = 0; url && page < (opts.pages ?? 2); page++) {
       const j: { data: any[]; paging?: { next?: string } } = await ig(url);
       for (const m of j.data) {
         const product = m.media_product_type === 'REELS' ? 'REELS' : 'FEED';
-        const ins = await mediaInsights(m.id, product, token);
+        const ins = await mediaInsights(m.id, product, token, kind);
         const row = {
           id: m.id, org_id: orgId, caption: m.caption ?? null, media_type: m.media_type, product_type: m.media_product_type ?? product,
           permalink: m.permalink, thumbnail: m.thumbnail_url ?? (m.media_type === 'IMAGE' || m.media_type === 'CAROUSEL_ALBUM' ? m.media_url : null) ?? null,
@@ -233,7 +245,7 @@ export async function syncInstagram(sb: SupabaseClient, orgId: string, opts: { p
     // Día de cuenta: ayer completo + seguidores de hoy
     const today = new Date();
     const y = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1));
-    const day = await accountDay(token, igId, Math.floor(y.getTime() / 1000), Math.floor(y.getTime() / 1000) + 86_400);
+    const day = await accountDay(token, igId, Math.floor(y.getTime() / 1000), Math.floor(y.getTime() / 1000) + 86_400, kind);
     await sb.from('ig_daily').upsert({ org_id: orgId, day: y.toISOString().slice(0, 10), reach: n(day.reach), views: n(day.views), engaged: n(day.accounts_engaged), interactions: n(day.total_interactions), profile_views: n(day.profile_views) });
     await sb.from('ig_daily').upsert({ org_id: orgId, day: today.toISOString().slice(0, 10), followers: me.followers_count ?? null }, { onConflict: 'org_id,day', ignoreDuplicates: false });
 
