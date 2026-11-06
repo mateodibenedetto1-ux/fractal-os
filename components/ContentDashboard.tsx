@@ -84,9 +84,9 @@ function FollowerBars({ rows, postsByDay }: { rows: DailyRow[]; postsByDay: Map<
   );
 }
 
-function Split({ parts, labels }: { parts: Record<string, number>; labels: Record<string, string> }) {
+function Split({ parts, labels, keepOrder }: { parts: Record<string, number>; labels: Record<string, string>; keepOrder?: boolean }) {
   const mounted = useMounted();
-  const list = Object.entries(parts).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const list = Object.entries(parts).filter(([, v]) => v > 0).sort((a, b) => (keepOrder ? a[0].localeCompare(b[0]) : b[1] - a[1]));
   const max = Math.max(1, ...list.map(([, v]) => v));
   if (!list.length) return <p className="fin-muted small">Sin datos para este período.</p>;
   return (
@@ -101,11 +101,11 @@ function Split({ parts, labels }: { parts: Record<string, number>; labels: Recor
   );
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: number | null | undefined; sub?: string; tone?: 'ok' | 'brand' }) {
+function Kpi({ label, value, sub, tone, text }: { label: string; value: number | null | undefined; sub?: string; tone?: 'ok' | 'brand'; text?: string }) {
   return (
     <div className="fin-card fin-kpi">
       <div className="fin-label">{label}</div>
-      <div className="fin-kpi-v" style={tone ? { color: `var(--${tone})` } : undefined}>{kfmt(value ?? null)}</div>
+      <div className="fin-kpi-v" style={tone ? { color: `var(--${tone})` } : undefined}>{text ?? kfmt(value ?? null)}</div>
       {sub && <span className="fin-delta fin-muted">{sub}</span>}
     </div>
   );
@@ -154,7 +154,7 @@ export function ContentDashboard({ lab, tab, days }: { lab: ContentLab; tab: Das
           </div>
           <div className="fin-card">
             <div className="fin-label"><span>Vistas por tipo de contenido</span><i /></div>
-            <Split parts={s?.views_by_type ?? {}} labels={TYPE} />
+            <Split parts={Object.fromEntries(Object.entries(s?.views_by_type ?? {}).filter(([k]) => k in TYPE))} labels={TYPE} />
             <div className="fin-label" style={{ marginTop: 18 }}><span>Quién las vio</span><i /></div>
             <Split parts={s?.views_by_follow ?? {}} labels={FOLLOW} />
           </div>
@@ -215,7 +215,7 @@ export function ContentDashboard({ lab, tab, days }: { lab: ContentLab; tab: Das
   const countryName = (code: string) => { try { return new Intl.DisplayNames(['es'], { type: 'region' }).of(code) ?? code; } catch { return code; } };
   const top = (parts: Record<string, number> = {}, n = 6, map?: (k: string) => string) =>
     Object.fromEntries(Object.entries(parts).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => [map ? map(k) : k, v]));
-  const ageOrder = Object.fromEntries(Object.entries(demo.age ?? {}).sort((a, b) => a[0].localeCompare(b[0])));
+  const ageOrder = Object.fromEntries(Object.entries(demo.age ?? {}).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v], i) => [`${String(i).padStart(2, '0')}|${k}`, v]));
   return (
     <>
       <section className="fin-kpis ct-kpis">
@@ -224,7 +224,7 @@ export function ContentDashboard({ lab, tab, days }: { lab: ContentLab; tab: Das
         <Kpi label="Follows" value={s?.follows ?? gained} />
         <Kpi label="Unfollows" value={s?.unfollows} tone="brand" />
         <Kpi label="Visitas al perfil" value={s?.profile_views} />
-        <Kpi label="Conversión perfil → seguidor" value={null} sub={s?.profile_views && s?.follows ? pct(s.follows / s.profile_views) : '—'} />
+        <Kpi label="Follows por visita al perfil" value={null} text={s?.profile_views && s?.follows ? pct(s.follows / s.profile_views) : '—'} sub="aproximado" />
       </section>
       <section className="fin-card">
         <div className="fin-label"><span>Seguidores ganados por día</span><i /><span className="fin-muted small">tocá una barra para ver qué se publicó</span></div>
@@ -235,7 +235,7 @@ export function ContentDashboard({ lab, tab, days }: { lab: ContentLab; tab: Das
           <div className="fin-label"><span>Género</span><i /></div>
           <Split parts={top(demo.gender, 3, (k) => GENDER[k] ?? k)} labels={{}} />
           <div className="fin-label" style={{ marginTop: 18 }}><span>Edad</span><i /></div>
-          <Split parts={ageOrder} labels={{}} />
+          <Split parts={ageOrder} labels={Object.fromEntries(Object.keys(ageOrder).map((k) => [k, k.split('|')[1]]))} keepOrder />
         </div>
         <div className="fin-card">
           <div className="fin-label"><span>Países principales</span><i /></div>
