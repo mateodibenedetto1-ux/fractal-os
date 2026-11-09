@@ -70,7 +70,7 @@ export function WorkflowCard({ orgId, steps, staff, clientName }: { orgId: strin
                 {mine.map((s, k) => (
                   <span key={k} className="wf-step">
                     <span>{s.title}</span>
-                    <em className={s.side}>{s.side === 'fractal' ? `Fractal${s.responsable ? ` · ${s.responsable}` : ''}` : `${clientName}${s.responsable ? ` · ${s.responsable}` : ''}`}</em>
+                    <em className={s.side}>{s.side === 'fractal' ? `Fractal${s.responsable ? ` · ${s.responsable}` : ''}` : `${clientName}${s.responsable && s.responsable !== clientName ? ` · ${s.responsable}` : ''}`}</em>
                   </span>
                 ))}
               </li>
