@@ -92,7 +92,7 @@ function ClientCard({ r }: { r: HealthRow }) {
         </section>
 
         <section>
-          <div className="hl-sub"><span>Tareas</span><span className="muted small">{r.tasks.weekDone}/{r.tasks.weekTotal} de la semana{r.tasks.overdue ? ` · ${r.tasks.overdue} vencidas` : ''}</span></div>
+          <div className="hl-sub"><span>Tareas</span><span className="muted small">{r.tasks.weekDone}/{r.tasks.weekTotal} de la semana{r.tasks.overdue ? ` · ${r.tasks.overdue} vencidas` : ''}{r.tasks.oldOverdue ? ` · ${r.tasks.oldOverdue} viejas sin cerrar` : ''}</span></div>
           <ul className="hl-tasks">
             {r.tasks.next.map((t) => (
               <li key={t.id} className={t.due_date && t.due_date < new Date().toISOString().slice(0, 10) ? 'late' : ''}>

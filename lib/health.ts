@@ -13,7 +13,7 @@ export interface HealthRow {
   color: Light | null;
   kpis: Kpi[];
   kpiPct: number | null;
-  tasks: { open: number; overdue: number; weekTotal: number; weekDone: number; next: Pick<ActionItem, 'id' | 'title' | 'due_date' | 'responsable' | 'priority'>[] };
+  tasks: { open: number; overdue: number; oldOverdue: number; weekTotal: number; weekDone: number; next: Pick<ActionItem, 'id' | 'title' | 'due_date' | 'responsable' | 'priority'>[] };
   stage: { onboarding: boolean; label: string };
   log: { id: string; color: Light | null; note: string | null; author: string | null; created_at: string }[];
 }
@@ -70,6 +70,8 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
     const mine = (tasks ?? []).filter((t) => t.org_id === o.id || t.client_org_id === o.id);
     const open = mine.filter((t) => !t.done);
     const overdue = open.filter((t) => t.due_date && t.due_date < today);
+    // Para el color solo cuentan las vencidas de las últimas 2 semanas (las viejas se limpian aparte)
+    const recent = overdue.filter((t) => t.due_date! >= addDays(today, -14));
     const inWeek = mine.filter((t) => t.due_date && t.due_date >= week && t.due_date <= weekEnd);
     const ks: Kpi[] = (kpis ?? []).filter((k) => k.org_id === o.id).map((k) => {
       const plan = planToDate({ target: Number(k.target), daily: k.daily }, today);
@@ -83,16 +85,17 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
     if (kpiPct != null) {
       auto = lightOf(kpiPct);
       autoWhy = `KPIs al ${Math.round(kpiPct * 100)} % del plan a la fecha.`;
-    } else if (inWeek.length || overdue.length) {
-      auto = overdue.length >= 3 ? 'rojo' : overdue.length ? 'amarillo' : 'verde';
-      autoWhy = overdue.length ? `${overdue.length} ${overdue.length === 1 ? 'tarea vencida' : 'tareas vencidas'}.` : 'Tareas al día.';
+    } else if (inWeek.length || recent.length) {
+      auto = recent.length >= 3 ? 'rojo' : recent.length ? 'amarillo' : 'verde';
+      autoWhy = recent.length ? `${recent.length} ${recent.length === 1 ? 'tarea vencida' : 'tareas vencidas'} en las últimas 2 semanas.` : 'Tareas al día.';
     }
-    if (auto !== 'rojo' && overdue.length >= 3) { auto = 'rojo'; autoWhy += ` ${overdue.length} tareas vencidas.`; }
+    if (auto === 'verde' && recent.length >= 3) { auto = 'amarillo'; autoWhy += ` Ojo: ${recent.length} tareas vencidas en las últimas 2 semanas.`; }
 
     const h = (health ?? []).find((x) => x.org_id === o.id) ?? null;
     const months = o.start_date ? Math.floor((Date.now() - new Date(o.start_date).getTime()) / (30.4 * 864e5)) + 1 : o.program_month;
     const onboarding = o.status === 'onboarding' || (months != null && months <= 3);
     const next = open
+      .filter((t) => !t.due_date || t.due_date >= addDays(today, -14))
       .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
       .slice(0, 4)
       .map((t) => ({ id: t.id, title: t.title, due_date: t.due_date, responsable: t.responsable, priority: t.priority }));
@@ -103,7 +106,7 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
       auto, autoWhy,
       color: (h?.color as Light | null) ?? auto,
       kpis: ks, kpiPct,
-      tasks: { open: open.length, overdue: overdue.length, weekTotal: inWeek.length, weekDone: inWeek.filter((t) => t.done).length, next },
+      tasks: { open: open.length, overdue: recent.length, oldOverdue: overdue.length - recent.length, weekTotal: inWeek.length, weekDone: inWeek.filter((t) => t.done).length, next },
       stage: { onboarding, label: onboarding ? `Onboarding${months ? ` · mes ${months}` : ''}` : `Activo${months ? ` · mes ${months}` : ''}` },
       log: (logs ?? []).filter((l) => l.org_id === o.id).slice(0, 4),
     };
