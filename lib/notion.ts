@@ -101,6 +101,8 @@ export const NOTION_DB = {
   teamCalls: process.env.NOTION_TEAM_CALLS_DB ?? '238ea339130d418c9747532d9a4cb9d6',
   /** Fulfillment Reports (dailies y weeklies). */
   fulfillmentReports: process.env.NOTION_FULFILLMENT_REPORTS_DB ?? '3f635093e90f4e6891192ed2daa28e4e',
+  /** Bóveda de reportes de Fractal (weeklies y fulfillment). */
+  vault: process.env.NOTION_VAULT_DB ?? '5a08bfd6bd0543e4b8777578774b17a7',
 };
 
 /** Markdown simple → bloques de Notion (títulos, viñetas, numeradas y párrafos). */
