@@ -50,7 +50,7 @@ export function EodPanel({ day, today, kpis, report, history, strikes, owners }:
       <form className={`panel panel-pad eod ${pending ? 'busy' : ''}`} action={(f) => start(async () => { const r = await saveEod(f); setMsg(r.ok ? 'Reporte guardado. También quedó registrado en Notion.' : r.error ?? 'No se pudo guardar.'); })}>
         <div className="eod-head">
           <div>
-            <b>Reporte del día</b>
+            <b>Reporte del día · Fractal</b>
             <span className="muted small"> · {day === today ? 'hoy' : short(day)}{report ? ` · enviado por ${report.author} a las ${time(report.updated_at)}` : ' · todavía no se envió'}</span>
           </div>
           <div className="eod-days" role="group" aria-label="Día del reporte">
@@ -64,35 +64,43 @@ export function EodPanel({ day, today, kpis, report, history, strikes, owners }:
         </div>
         <input type="hidden" name="day" value={day} />
 
-        {kpis.length > 0 ? (
-          <div className="eod-kpis">
-            {groups.map((g) => (
-              <div key={g}>
-                <div className="hl-sub"><span>{g}</span><span className="muted small">publicado / meta del día</span></div>
-                {kpis.filter((k) => k.org === g).map((k) => {
-                  const n = Number(vals[k.id]) || 0;
-                  const ok = n >= k.dailyTarget;
-                  return (
-                    <label key={k.id} className="eod-kpi">
-                      <span>{k.name}</span>
-                      <span className="eod-kpi-in">
-                        <input className="input sm" type="number" min={0} step="any" name={`kpi_${k.id}`} value={vals[k.id]} onChange={(e) => setVals({ ...vals, [k.id]: e.target.value })} />
-                        <span className={`small ${ok ? 'ok' : 'late'}`}>/ {k.dailyTarget}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            ))}
-            <p className="small muted">Total del día: <b>{published}</b> de {Math.round(planned * 10) / 10}. Si un KPI queda por debajo de la meta del día dos días seguidos, se genera un strike.</p>
-          </div>
-        ) : <p className="muted small">No hay KPIs diarios cargados esta semana.</p>}
-
         <div className="eod-texts">
-          <label><span className="small">Qué se hizo hoy</span><textarea className="input" name="done" rows={3} defaultValue={report?.done ?? ''} placeholder="Publicaciones, entregas, avances por cliente" /></label>
+          <label className="wide"><span className="small">Qué se hizo hoy</span><textarea className="input" name="done" rows={4} defaultValue={report?.done ?? ''} placeholder="Avances de Fractal y de cada cliente: entregas, publicaciones, llamadas, equipo" /></label>
+          <label><span className="small">Piezas planificadas hoy</span><input className="input" type="number" min={0} name="planned" defaultValue={report?.planned ?? ''} placeholder={planned ? String(Math.round(planned * 10) / 10) : '0'} /></label>
+          <label><span className="small">Piezas publicadas hoy</span><input className="input" type="number" min={0} name="published" defaultValue={report?.published ?? ''} placeholder={String(published)} /></label>
+          <label className="wide"><span className="small">Top contenido del día</span><input className="input" name="top_content" defaultValue={report?.top_content ?? ''} placeholder="La pieza que mejor funcionó y por qué" /></label>
           <label><span className="small">Qué quedó pendiente y por qué</span><textarea className="input" name="pending" rows={2} defaultValue={report?.pending ?? ''} /></label>
+          <label><span className="small">Próximos pasos (mañana)</span><textarea className="input" name="next_steps" rows={2} defaultValue={report?.next_steps ?? ''} /></label>
           <label><span className="small">Bloqueos</span><textarea className="input" name="blockers" rows={2} defaultValue={report?.blockers ?? ''} placeholder="Qué o quién lo frena" /></label>
+          <label><span className="small">Notas</span><textarea className="input" name="notes" rows={2} defaultValue={report?.notes ?? ''} /></label>
         </div>
+
+        {kpis.length > 0 && (
+          <details className="eod-kpi-box" open={kpis.some((k) => k.today > 0)}>
+            <summary className="small"><b>KPIs de clientes de la semana</b> <span className="muted">· {published} de {Math.round(planned * 10) / 10} hoy · se suman al semáforo</span></summary>
+            <div className="eod-kpis">
+              {groups.map((g) => (
+                <div key={g}>
+                  <div className="hl-sub"><span>{g}</span><span className="muted small">hoy / meta del día</span></div>
+                  {kpis.filter((k) => k.org === g).map((k) => {
+                    const n = Number(vals[k.id]) || 0;
+                    return (
+                      <label key={k.id} className="eod-kpi">
+                        <span>{k.name}</span>
+                        <span className="eod-kpi-in">
+                          <input className="input sm" type="number" min={0} step="any" name={`kpi_${k.id}`} value={vals[k.id]} onChange={(e) => setVals({ ...vals, [k.id]: e.target.value })} />
+                          <span className={`small ${n >= k.dailyTarget ? 'ok' : 'late'}`}>/ {k.dailyTarget}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <p className="small muted">Si un KPI queda por debajo de la meta del día dos días seguidos, se genera un strike. Los KPIs se cambian cada semana en las tarjetas de abajo, según la estrategia.</p>
+          </details>
+        )}
+
         <div className="row" style={{ gap: 10, alignItems: 'center' }}>
           <button className="btn primary" disabled={pending}>{report ? 'Actualizar reporte' : 'Enviar reporte del día'}</button>
           {msg && <span className="small" role="status">{msg}</span>}
@@ -104,7 +112,7 @@ export function EodPanel({ day, today, kpis, report, history, strikes, owners }:
             <ul>
               {history.filter((h) => h.day !== day).slice(0, 10).map((h) => (
                 <li key={h.id}>
-                  <b>{short(h.day)}</b> · {h.author}{h.planned ? ` · ${h.published} de ${h.planned}` : ''}
+                  <b>{short(h.day)}</b> · {h.author}{h.planned ? ` · ${h.published} de ${h.planned} publicadas` : ''}
                   {h.done && <div className="small">{h.done}</div>}
                   {h.blockers && <div className="small late">Bloqueos: {h.blockers}</div>}
                 </li>

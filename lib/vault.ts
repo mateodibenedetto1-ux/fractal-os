@@ -41,7 +41,7 @@ export async function getVault() {
   const sb = supabaseAdmin();
   const [{ data: reports }, { data: daily }] = await Promise.all([
     sb.from('vault_reports').select('*').order('week_start', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }),
-    sb.from('daily_reports').select('id, day, author, done, pending, blockers, published, planned, notion_id').order('day', { ascending: false }).limit(60),
+    sb.from('daily_reports').select('id, day, author, done, pending, blockers, next_steps, top_content, notes, published, planned, notion_id').order('day', { ascending: false }).limit(60),
   ]);
   return { reports: (reports ?? []) as VaultReport[], daily: daily ?? [] };
 }

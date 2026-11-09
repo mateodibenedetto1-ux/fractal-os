@@ -1050,3 +1050,8 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .vault-body table { border-collapse: collapse; margin: 10px 0; font-size: 14px; }
 .vault-body td, .vault-body th { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; }
 .vault-daily p { margin: 6px 0 0; font-size: 14px; }
+.eod-texts label.wide { grid-column: 1 / -1; }
+.eod-texts label:first-child { grid-column: 1 / -1; }
+.eod-kpi-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+.eod-kpi-box summary { cursor: pointer; }
+.eod-kpi-box .eod-kpis { margin: 12px 0 8px; }

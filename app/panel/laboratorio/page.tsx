@@ -8,6 +8,8 @@ import { MODULES } from '@/lib/brain';
 import { addLabEntry, syncAtlasNow } from '@/lib/actions';
 import { METHOD, TIPOS, TIPO_HELP, TIPO_PLURAL, VAULT_LINKS } from '@/lib/lab-content';
 import { AtlasTable } from '@/components/AtlasTable';
+import { VaultView } from '@/components/VaultView';
+import { getVault } from '@/lib/vault';
 
 export const metadata = { title: 'Laboratorio' };
 export const maxDuration = 300;
@@ -19,6 +21,7 @@ const TABS = [
   { k: 'equipo', l: 'Equipo' },
   { k: 'criterios', l: 'Criterios y archivo' },
   { k: 'conocimiento', l: 'Conocimiento' },
+  { k: 'boveda', l: 'Bóveda de reportes' },
 ];
 
 export default async function Lab({ searchParams }: { searchParams: Promise<{ v?: string; tipo?: string; k?: string }> }) {
@@ -48,6 +51,8 @@ export default async function Lab({ searchParams }: { searchParams: Promise<{ v?
           <Link key={t.k} href={`/panel/laboratorio?v=${t.k}`} aria-current={v === t.k ? 'page' : undefined}>{t.l}</Link>
         ))}
       </nav>
+
+      {v === 'boveda' && <VaultTab />}
 
       {v === 'conocimiento' && (
         <div className="stack" style={{ gap: 22 }}>
@@ -261,5 +266,15 @@ export default async function Lab({ searchParams }: { searchParams: Promise<{ v?
         </ul>
       )}
     </>
+  );
+}
+
+async function VaultTab() {
+  const { reports, daily } = await getVault();
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <p className="muted" style={{ maxWidth: '72ch' }}>Los reportes de Fractal: weeklies, fulfillment, cierres de semana y los reportes del día del equipo. Los semanales se escriben en Notion (Fulfillment → Bóveda de reportes) y se traen acá.</p>
+      <VaultView reports={reports} daily={daily} />
+    </div>
   );
 }

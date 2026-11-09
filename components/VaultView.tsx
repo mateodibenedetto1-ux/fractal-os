@@ -5,7 +5,7 @@ import { marked } from 'marked';
 import type { VaultReport } from '@/lib/vault';
 import { syncVaultNow } from '@/lib/vault-actions';
 
-type Daily = { id: string; day: string; author: string; done: string | null; pending: string | null; blockers: string | null; published: number | null; planned: number | null; notion_id: string | null };
+type Daily = { id: string; day: string; author: string; done: string | null; pending: string | null; blockers: string | null; next_steps: string | null; top_content: string | null; notes: string | null; published: number | null; planned: number | null; notion_id: string | null };
 
 const d = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 const range = (a: string | null, b: string | null) => (a ? (b ? `${d(a)} – ${d(b)}` : d(a)) : '');
@@ -67,10 +67,13 @@ export function VaultView({ reports, daily }: { reports: VaultReport[]; daily: D
             <article key={r.id} className="panel panel-pad vault-daily">
               <div className="row between">
                 <b>{d(r.day)} · {r.author}</b>
-                <span className="small muted">{r.planned ? `${r.published} publicados de ${r.planned}` : ''}</span>
+                <span className="small muted">{r.planned ? `${r.published} de ${r.planned} publicadas` : ''}</span>
               </div>
               {r.done && <p><span className="muted small">Hecho:</span> {r.done}</p>}
+              {r.top_content && <p><span className="muted small">Top contenido:</span> {r.top_content}</p>}
               {r.pending && <p><span className="muted small">Pendiente:</span> {r.pending}</p>}
+              {r.next_steps && <p><span className="muted small">Próximos pasos:</span> {r.next_steps}</p>}
+              {r.notes && <p><span className="muted small">Notas:</span> {r.notes}</p>}
               {r.blockers && <p className="late"><span className="small">Bloqueos:</span> {r.blockers}</p>}
             </article>
           ))}

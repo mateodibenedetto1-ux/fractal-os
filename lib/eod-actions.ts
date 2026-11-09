@@ -33,11 +33,15 @@ export async function saveEod(form: FormData): Promise<{ ok: boolean; error?: st
     }
   }
 
+  // Publicado / planificado del día de todo Fractal: si se cargan a mano, mandan sobre la suma de KPIs
+  const num = (k: string) => { const x = String(form.get(k) ?? '').trim(); return x === '' ? null : Math.max(0, Number(x) || 0); };
+  published = num('published') ?? published;
+  planned = num('planned') ?? planned;
+  const txt = (k: string) => String(form.get(k) ?? '').trim() || null;
   const row = {
     day, author: v.name,
-    done: String(form.get('done') ?? '').trim() || null,
-    pending: String(form.get('pending') ?? '').trim() || null,
-    blockers: String(form.get('blockers') ?? '').trim() || null,
+    done: txt('done'), pending: txt('pending'), blockers: txt('blockers'),
+    next_steps: txt('next_steps'), top_content: txt('top_content'), notes: txt('notes'),
     published, planned, updated_at: new Date().toISOString(),
   };
   const { data: saved, error } = await sb.from('daily_reports').upsert(row, { onConflict: 'day,author' }).select('id, notion_id').single();
@@ -51,8 +55,8 @@ export async function saveEod(form: FormData): Promise<{ ok: boolean; error?: st
         'Nombre del reporte (ej: Nacho · 2/11)': `${v.name} · ${Number(d)}/${Number(m)}`,
         Date: day, Type: 'Daily', Published: published, Planned: Math.round(planned * 10) / 10,
         'On-Time Rate': planned ? Math.round((published / planned) * 100) / 100 : null,
-        Notes: [row.done ? `Hecho: ${row.done}` : '', lines.length ? `KPIs: ${lines.join(' · ')}` : ''].filter(Boolean).join('\n'),
-        Pending: row.pending, Blockers: row.blockers,
+        Notes: [row.done ? `Hecho: ${row.done}` : '', row.notes ?? '', lines.length ? `KPIs: ${lines.join(' · ')}` : ''].filter(Boolean).join('\n'),
+        Pending: row.pending, Blockers: row.blockers, 'Next Steps': row.next_steps, 'Top Content': row.top_content,
       };
       if (saved?.notion_id) await updateRow(saved.notion_id, values);
       else {

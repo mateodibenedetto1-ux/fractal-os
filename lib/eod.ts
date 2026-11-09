@@ -7,7 +7,7 @@ import { addDays, mondayOf, todayAR } from './health';
 export const EOD_START = '2026-11-09';
 
 export interface EodKpi { id: string; org_id: string; org: string; name: string; target: number; dailyTarget: number; today: number; owner: string | null }
-export interface DailyReport { id: string; day: string; author: string; done: string | null; pending: string | null; blockers: string | null; published: number | null; planned: number | null; updated_at: string }
+export interface DailyReport { id: string; day: string; author: string; done: string | null; pending: string | null; blockers: string | null; next_steps: string | null; top_content: string | null; notes: string | null; published: number | null; planned: number | null; updated_at: string }
 export interface Strike { id: string; day: string; kind: 'kpi' | 'reporte'; subject: string; org_id: string | null; owner: string | null; reason: string | null; status: 'abierto' | 'cerrado'; measure: string | null; closed_by: string | null; created_at: string }
 
 const isWeekday = (day: string) => { const d = new Date(`${day}T12:00:00Z`).getUTCDay(); return d !== 0 && d !== 6; };
