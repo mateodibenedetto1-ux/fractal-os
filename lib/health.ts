@@ -92,8 +92,9 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
     if (auto === 'verde' && recent.length >= 3) { auto = 'amarillo'; autoWhy += ` Ojo: ${recent.length} tareas vencidas en las últimas 2 semanas.`; }
 
     const h = (health ?? []).find((x) => x.org_id === o.id) ?? null;
-    const months = o.start_date ? Math.floor((Date.now() - new Date(o.start_date).getTime()) / (30.4 * 864e5)) + 1 : o.program_month;
-    const onboarding = o.status === 'onboarding' || (months != null && months <= 3);
+    const months = o.program_month ?? (o.start_date ? Math.floor((Date.now() - new Date(o.start_date).getTime()) / (30.4 * 864e5)) + 1 : null);
+    // Onboarding solo si el cliente está marcado así; el resto está en servicio
+    const onboarding = o.status === 'onboarding';
     const next = open
       .filter((t) => !t.due_date || t.due_date >= addDays(today, -14))
       .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
@@ -107,7 +108,7 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
       color: (h?.color as Light | null) ?? auto,
       kpis: ks, kpiPct,
       tasks: { open: open.length, overdue: recent.length, oldOverdue: overdue.length - recent.length, weekTotal: inWeek.length, weekDone: inWeek.filter((t) => t.done).length, next },
-      stage: { onboarding, label: onboarding ? `Onboarding${months ? ` · mes ${months}` : ''}` : `Activo${months ? ` · mes ${months}` : ''}` },
+      stage: { onboarding, label: onboarding ? `Onboarding${months ? ` · mes ${months}` : ''}` : `En servicio${months ? ` · mes ${months}` : ''}` },
       log: (logs ?? []).filter((l) => l.org_id === o.id).slice(0, 4),
     };
   });

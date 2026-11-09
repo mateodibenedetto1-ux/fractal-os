@@ -38,7 +38,7 @@ export default async function Semaforo() {
         <summary>Cómo se usa en la daily</summary>
         <ol>
           <li>Primero los clientes en <b>rojo</b>: cada uno llega con una propuesta concreta para levantarlo.</li>
-          <li>Después los que están en <b>onboarding</b> (primeros 3 meses): son prioridad porque ahí se gana o se pierde el cliente.</li>
+          <li>Después los que están en <b>onboarding</b>: son prioridad porque ahí se gana o se pierde el cliente.</li>
           <li>Repasar las tareas de ayer: qué se terminó, qué no y por qué. Lo que no se hizo pasa a hoy.</li>
           <li>Actualizar los reales de los KPIs y anotar en la bitácora lo que pasó.</li>
         </ol>
