@@ -10,6 +10,7 @@ import { METHOD, TIPOS, TIPO_HELP, TIPO_PLURAL, VAULT_LINKS } from '@/lib/lab-co
 import { AtlasTable } from '@/components/AtlasTable';
 
 export const metadata = { title: 'Laboratorio' };
+export const maxDuration = 300;
 
 const TABS = [
   { k: 'resumen', l: 'Resumen' },

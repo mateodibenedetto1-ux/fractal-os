@@ -172,23 +172,11 @@ export async function syncOrgFromNotion(sb: SupabaseClient, org: Org): Promise<S
 }
 
 /** Atlas de Notion → tabla lab_entries. */
-export async function syncAtlasFromNotion(sb: SupabaseClient): Promise<{ count: number; error?: string }> {
+export async function syncAtlasFromNotion(sb: SupabaseClient, opts: { bodies?: number } = {}): Promise<{ count: number; bodies?: number; error?: string }> {
   if (!hasNotion()) return { count: 0, error: 'Falta NOTION_TOKEN' };
   try {
     const rows = await queryDatabase(NOTION_DB.atlas);
-    // Cuerpo de la página (transcripciones, desarrollo): solo de las que cambiaron, de a 5 y como mucho 40 por corrida
-    const { data: known } = await sb.from('lab_entries').select('notion_id, notion_edited, body');
-    const prev = new Map((known ?? []).map((k) => [k.notion_id, k]));
-    const stale = rows.filter((r) => { const k = prev.get(plainId(r.id)); return !k || !k.notion_edited || new Date(k.notion_edited).getTime() < new Date(r.last_edited_time).getTime(); }).slice(0, 40);
-    const bodies = new Map<string, string | null>();
-    for (let i = 0; i < stale.length; i += 5) {
-      await Promise.all(stale.slice(i, i + 5).map(async (r) => { bodies.set(plainId(r.id), await notionPageMarkdown(r.id)); }));
-    }
-    for (const r of rows) {
-      const id = plainId(r.id);
-      const body = bodies.has(id) ? { body: bodies.get(id) || null, notion_edited: r.last_edited_time } : {};
-      await sb.from('lab_entries').upsert({
-        ...body,
+    for (let i = 0; i < rows.length; i += 10) await Promise.all(rows.slice(i, i + 10).map((r) => sb.from('lab_entries').upsert({
         notion_id: plainId(r.id),
         title: pageTitle(r),
         tipo: val(prop(r, 'Tipo')),
@@ -201,9 +189,21 @@ export async function syncAtlasFromNotion(sb: SupabaseClient): Promise<{ count: 
         fuente: val(prop(r, 'Fuente')),
         notas: val(prop(r, 'Notas')),
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'notion_id' });
+      }, { onConflict: 'notion_id' })));
+    // Cuerpo de la página (transcripciones, desarrollo): solo de las que cambiaron, las más recientes primero, de a 6
+    const { data: known } = await sb.from('lab_entries').select('notion_id, notion_edited');
+    const prev = new Map((known ?? []).map((k) => [k.notion_id, k.notion_edited as string | null]));
+    const stale = rows
+      .filter((r) => { const k = prev.get(plainId(r.id)); return !k || new Date(k).getTime() < new Date(r.last_edited_time).getTime(); })
+      .sort((a, b) => b.last_edited_time.localeCompare(a.last_edited_time))
+      .slice(0, opts.bodies ?? 24);
+    for (let i = 0; i < stale.length; i += 6) {
+      await Promise.all(stale.slice(i, i + 6).map(async (r) => {
+        const body = await notionPageMarkdown(r.id);
+        await sb.from('lab_entries').update({ body: body || null, notion_edited: r.last_edited_time }).eq('notion_id', plainId(r.id));
+      }));
     }
-    return { count: rows.length };
+    return { count: rows.length, bodies: stale.length };
   } catch (e) {
     return { count: 0, error: e instanceof Error ? e.message : String(e) };
   }
