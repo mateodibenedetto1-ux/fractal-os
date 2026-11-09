@@ -30,7 +30,6 @@ export default async function ClientLayout({ children, params }: { children: Rea
         <NavLink href={`${base}/llamadas`}>Llamadas</NavLink>
         <NavLink href={`${base}/recursos`}>Recursos</NavLink>
         <NavLink href={`${base}/biblioteca`}>Biblioteca</NavLink>
-        <NavLink href={`${base}/calendario`}>Calendario</NavLink>
         <NavLink href={`${base}/roadmap`}>Roadmap</NavLink>
         <NavLink href={`${base}/accesos`}>Accesos</NavLink>
       </nav>

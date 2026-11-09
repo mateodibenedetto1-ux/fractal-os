@@ -38,7 +38,6 @@ export default async function PortalLayout({ children, params }: { children: Rea
           <NavLink href={`${base}/accionables`}>Accionables</NavLink>
           <NavLink href={`${base}/recursos`}>Recursos</NavLink>
           <NavLink href={`${base}/biblioteca`}>Biblioteca</NavLink>
-          <NavLink href={`${base}/calendario`}>Calendario</NavLink>
           <NavLink href={`${base}/roadmap`}>Roadmap</NavLink>
         </nav>
         {children}
