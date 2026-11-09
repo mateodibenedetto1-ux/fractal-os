@@ -4,7 +4,7 @@ import type { ActionItem, Org } from './types';
 
 export type Light = 'verde' | 'amarillo' | 'rojo';
 export interface WorkflowStep { dow: number; title: string; side: 'fractal' | 'cliente'; responsable?: string | null }
-export interface Kpi { id: string; name: string; target: number; actual: number; daily: boolean; position: number; plan: number; pct: number | null }
+export interface Kpi { id: string; name: string; target: number; actual: number; daily: boolean; position: number; plan: number; pct: number | null; today: number }
 export interface HealthRow {
   org: Pick<Org, 'id' | 'name' | 'slug' | 'status' | 'start_date' | 'program_month' | 'vertical'> & { workflow: WorkflowStep[] };
   manual: { color: Light | null; importance: string | null; note: string | null; updated_by: string | null; updated_at: string } | null;
@@ -65,6 +65,8 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
       .or(`org_id.in.(${ids.join(',')}),client_org_id.in.(${ids.join(',')})`).is('parent_id', null),
   ]);
   const weekEnd = addDays(week, 6);
+  const kpiIds = (kpis ?? []).map((k) => k.id);
+  const { data: todayVals } = kpiIds.length ? await sb.from('kpi_daily').select('kpi_id, value').in('kpi_id', kpiIds).eq('day', today) : { data: [] };
 
   const rows: HealthRow[] = (orgs ?? []).map((o) => {
     const mine = (tasks ?? []).filter((t) => t.org_id === o.id || t.client_org_id === o.id);
@@ -75,7 +77,7 @@ export async function getHealthBoard(): Promise<{ rows: HealthRow[]; week: strin
     const inWeek = mine.filter((t) => t.due_date && t.due_date >= week && t.due_date <= weekEnd);
     const ks: Kpi[] = (kpis ?? []).filter((k) => k.org_id === o.id).map((k) => {
       const plan = planToDate({ target: Number(k.target), daily: k.daily }, today);
-      return { id: k.id, name: k.name, target: Number(k.target), actual: Number(k.actual), daily: k.daily, position: k.position, plan, pct: plan > 0 ? Number(k.actual) / plan : null };
+      return { id: k.id, name: k.name, target: Number(k.target), actual: Number(k.actual), daily: k.daily, position: k.position, plan, pct: plan > 0 ? Number(k.actual) / plan : null, today: Number((todayVals ?? []).find((v) => v.kpi_id === k.id)?.value ?? 0) };
     });
     const withPct = ks.filter((k) => k.pct != null);
     const kpiPct = withPct.length ? withPct.reduce((a, k) => a + Math.min(1, k.pct!), 0) / withPct.length : null;

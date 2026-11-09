@@ -1,5 +1,8 @@
 import { getHealthBoard } from '@/lib/health';
 import { HealthBoard } from '@/components/HealthBoard';
+import { EodPanel } from '@/components/EodPanel';
+import { getEod } from '@/lib/eod';
+import { todayAR } from '@/lib/health';
 import { DEMO } from '@/lib/env';
 
 export const metadata = { title: 'Semáforo' };
@@ -7,9 +10,12 @@ export const dynamic = 'force-dynamic';
 
 const fmt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' });
 
-export default async function Semaforo() {
+export default async function Semaforo({ searchParams }: { searchParams: Promise<{ dia?: string }> }) {
   if (DEMO) return <div className="panel panel-pad">No disponible en modo demo.</div>;
-  const { rows, week } = await getHealthBoard();
+  const sp = await searchParams;
+  const today = todayAR();
+  const day = sp.dia && /^\d{4}-\d{2}-\d{2}$/.test(sp.dia) && sp.dia <= today ? sp.dia : today;
+  const [{ rows, week }, eod] = await Promise.all([getHealthBoard(), getEod(day)]);
   const count = (c: string) => rows.filter((r) => r.color === c).length;
   const red = count('rojo');
   const redPct = rows.length ? red / rows.length : 0;
@@ -33,6 +39,8 @@ export default async function Semaforo() {
           <div><b>{Math.round(redPct * 100)} %</b><span className="muted small">en rojo · regla: máximo 8 %</span></div>
         </div>
       </section>
+
+      <EodPanel day={day} today={today} kpis={eod.kpis} report={eod.report} history={eod.history} strikes={eod.strikes} owners={eod.owners} />
 
       <details className="panel panel-pad hl-help">
         <summary>Cómo se usa en la daily</summary>

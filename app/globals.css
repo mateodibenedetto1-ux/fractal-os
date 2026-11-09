@@ -1002,3 +1002,39 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 .wf-edit { display: grid; grid-template-columns: 120px minmax(0, 1fr) 130px 130px 28px; gap: 6px; align-items: center; }
 @media (max-width: 700px) { .wf-edit { grid-template-columns: 1fr 1fr; } }
 .input.sm, .select.sm { padding: 5px 9px; font-size: 13px; min-height: 0; }
+
+/* Reporte del día y strikes */
+.eod-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; align-items: start; }
+@media (max-width: 1000px) { .eod-grid { grid-template-columns: 1fr; } }
+.eod.busy { opacity: .7; }
+.eod-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.eod-days { display: flex; gap: 2px; border: 1px solid var(--line); border-radius: 99px; padding: 3px; }
+.eod-days a { font-size: 12.5px; padding: 4px 10px; border-radius: 99px; color: var(--muted); text-decoration: none; }
+.eod-days a.on { background: var(--brand); color: var(--brand-ink, #fff); }
+.eod-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 14px; }
+.eod-kpis > p { grid-column: 1 / -1; margin: 0; }
+.eod-kpi { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; font-size: 13.5px; }
+.eod-kpi-in { display: flex; align-items: center; gap: 6px; }
+.eod-kpi-in .input { width: 64px; text-align: right; }
+.ok { color: #3fa66b; }
+.late { color: #d9534f; }
+.eod-texts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.eod-texts label { display: flex; flex-direction: column; gap: 4px; }
+.eod-texts label:first-child { grid-column: 1 / -1; }
+@media (max-width: 700px) { .eod-texts { grid-template-columns: 1fr; } }
+.eod-history { margin-top: 12px; }
+.eod-history ul { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.eod-owners { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.eod-owners > div { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-width: 90px; }
+.eod-owners b { font-size: 22px; font-weight: 500; }
+.eod-owners .alert { border-color: #d9534f; }
+.eod-owners .alert b { color: #d9534f; }
+.eod-strike-list { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-direction: column; gap: 10px; }
+.eod-strike { border-left: 3px solid #d9534f; padding: 6px 0 6px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.eod-strike.cerrado { border-left-color: var(--line); opacity: .75; }
+.eod-strike-main { display: flex; flex-direction: column; gap: 2px; }
+.eod-strike-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #d9534f; }
+.eod-strike-close { display: flex; gap: 6px; }
+.eod-strike-close .input { flex: 1; }
+.linklike { background: none; border: 0; color: var(--brand); cursor: pointer; padding: 0; font: inherit; }
+.eod-rules p { margin: 6px 0 0; line-height: 1.5; }

@@ -99,6 +99,8 @@ export const NOTION_DB = {
   rewards: process.env.NOTION_REWARDS_DB ?? 'ae77b03ceacb4ffbad485e36f337f74c',
   /** Llamadas del equipo (Fulfillment). */
   teamCalls: process.env.NOTION_TEAM_CALLS_DB ?? '238ea339130d418c9747532d9a4cb9d6',
+  /** Fulfillment Reports (dailies y weeklies). */
+  fulfillmentReports: process.env.NOTION_FULFILLMENT_REPORTS_DB ?? '3f635093e90f4e6891192ed2daa28e4e',
 };
 
 /** Markdown simple → bloques de Notion (títulos, viñetas, numeradas y párrafos). */

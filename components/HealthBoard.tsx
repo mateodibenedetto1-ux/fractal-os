@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import type { HealthRow, Light } from '@/lib/health';
+import { bumpKpiToday } from '@/lib/eod-actions';
 import { addHealthNote, addKpi, copyLastWeekKpis, deleteKpi, setHealth, setImportance, setKpiActual } from '@/lib/health-actions';
 
 const LABEL: Record<Light, string> = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo' };
@@ -22,14 +23,22 @@ function KpiRow({ k }: { k: HealthRow['kpis'][number] }) {
   const c: Light | null = k.pct == null ? null : k.pct <= 0.8 ? 'rojo' : k.pct < 0.99 ? 'amarillo' : 'verde';
   return (
     <tr className={pending ? 'busy' : ''}>
-      <td><Dot c={c} /> {k.name}</td>
+      <td><Dot c={c} /> {k.name}{k.daily && <span className="muted small"> · hoy {n(k.today)}</span>}</td>
       <td className="num muted">{n(k.plan)}<span className="small"> / {n(k.target)}</span></td>
       <td className="num">
-        <span className="hl-step">
-          <button type="button" onClick={() => save(Math.max(0, Number(val) - 1))} aria-label="Restar uno">−</button>
-          <input value={val} inputMode="decimal" onChange={(e) => setVal(e.target.value)} onBlur={() => Number(val) !== k.actual && save(Number(val) || 0)} aria-label={`Real de ${k.name}`} />
-          <button type="button" onClick={() => save(Number(val) + 1)} aria-label="Sumar uno">+</button>
-        </span>
+        {k.daily ? (
+          <span className="hl-step">
+            <button type="button" onClick={() => start(() => bumpKpiToday(k.id, -1))} aria-label="Restar uno hoy">−</button>
+            <input value={n(k.actual)} readOnly aria-label={`Real de la semana de ${k.name}`} />
+            <button type="button" onClick={() => start(() => bumpKpiToday(k.id, 1))} aria-label="Sumar uno hoy">+</button>
+          </span>
+        ) : (
+          <span className="hl-step">
+            <button type="button" onClick={() => save(Math.max(0, Number(val) - 1))} aria-label="Restar uno">−</button>
+            <input value={val} inputMode="decimal" onChange={(e) => setVal(e.target.value)} onBlur={() => Number(val) !== k.actual && save(Number(val) || 0)} aria-label={`Real de ${k.name}`} />
+            <button type="button" onClick={() => save(Number(val) + 1)} aria-label="Sumar uno">+</button>
+          </span>
+        )}
       </td>
       <td className={`num hl-pct ${c ?? ''}`}>{k.pct == null ? '—' : `${Math.round(k.pct * 100)} %`}</td>
       <td><button type="button" className="hl-x" onClick={() => confirm(`¿Borrar "${k.name}"?`) && start(() => deleteKpi(k.id))} aria-label="Borrar KPI">×</button></td>
