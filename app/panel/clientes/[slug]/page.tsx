@@ -5,6 +5,7 @@ import { RoadmapProgress } from '@/components/Roadmap';
 import { syncClientNow, updateClientAccount } from '@/lib/actions';
 import { fmtDate, relative, STATUS_LABEL } from '@/lib/format';
 import { Cells } from '@/components/Cells';
+import { WorkflowCard } from '@/components/WorkflowCard';
 
 export default async function Overview({ params }: { params: Promise<{ slug: string }> }) {
   const org = await getOrgBySlug((await params).slug);
@@ -16,6 +17,8 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
   const doneRecently = tops.filter((a) => a.done_at && Date.now() - new Date(a.done_at).getTime() < 7 * 864e5).length;
 
   return (
+    <>
+    <div style={{ marginBottom: 14 }}><WorkflowCard orgId={org.id} steps={org.workflow ?? []} staff clientName={org.contact_name || org.name} /></div>
     <div className="two">
       <form action={updateClientAccount} className="panel panel-pad stack" style={{ gap: 16 }}>
         <input type="hidden" name="id" value={org.id} />
@@ -84,5 +87,6 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
         </div>
       </aside>
     </div>
+    </>
   );
 }

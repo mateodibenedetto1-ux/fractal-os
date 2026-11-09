@@ -22,6 +22,7 @@ const P: Record<string, string> = {
   plus: 'M12 5v14 M5 12h14',
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 14h10l1-14',
   spark: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z',
+  signal: 'M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   play: 'M4 4h16v16H4z M10 8.5v7l6-3.5z',
   chart: 'M4 20V10 M10 20V4 M16 20v-7 M22 20H2',
   out: 'M15 4h4v16h-4 M10 16l-4-4 4-4 M6 12h10',

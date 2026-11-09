@@ -27,6 +27,7 @@ export interface Org {
   notion_client_page?: string | null;
   segment?: 'b2b' | 'consulting';
   vertical?: string | null;
+  workflow?: { dow: number; title: string; side: 'fractal' | 'cliente'; responsable?: string | null }[];
   created_at: string;
 }
 
@@ -134,6 +135,7 @@ export interface LabEntry {
   fecha: string | null;
   fuente: string | null;
   notas: string | null;
+  body?: string | null;
   created_at: string;
 }
 

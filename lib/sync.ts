@@ -1,7 +1,7 @@
 import 'server-only';
 import { asVertical } from './verticals';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { NOTION_DB, createRow, hasNotion, isNotionId, pageTitle, plainId, prop, queryDatabase, updateRow, val } from './notion';
+import { NOTION_DB, createRow, hasNotion, isNotionId, notionPageMarkdown, pageTitle, plainId, prop, queryDatabase, updateRow, val } from './notion';
 import type { Org, Responsable } from './types';
 
 const PRIORITY_IN: Record<string, string> = { crítica: 'critica', critica: 'critica', alta: 'alta', media: 'media', baja: 'baja', p1: 'alta', p2: 'media', p3: 'baja' };
@@ -176,8 +176,19 @@ export async function syncAtlasFromNotion(sb: SupabaseClient): Promise<{ count: 
   if (!hasNotion()) return { count: 0, error: 'Falta NOTION_TOKEN' };
   try {
     const rows = await queryDatabase(NOTION_DB.atlas);
+    // Cuerpo de la página (transcripciones, desarrollo): solo de las que cambiaron, de a 5 y como mucho 40 por corrida
+    const { data: known } = await sb.from('lab_entries').select('notion_id, notion_edited, body');
+    const prev = new Map((known ?? []).map((k) => [k.notion_id, k]));
+    const stale = rows.filter((r) => { const k = prev.get(plainId(r.id)); return !k || !k.notion_edited || new Date(k.notion_edited).getTime() < new Date(r.last_edited_time).getTime(); }).slice(0, 40);
+    const bodies = new Map<string, string | null>();
+    for (let i = 0; i < stale.length; i += 5) {
+      await Promise.all(stale.slice(i, i + 5).map(async (r) => { bodies.set(plainId(r.id), await notionPageMarkdown(r.id)); }));
+    }
     for (const r of rows) {
+      const id = plainId(r.id);
+      const body = bodies.has(id) ? { body: bodies.get(id) || null, notion_edited: r.last_edited_time } : {};
       await sb.from('lab_entries').upsert({
+        ...body,
         notion_id: plainId(r.id),
         title: pageTitle(r),
         tipo: val(prop(r, 'Tipo')),

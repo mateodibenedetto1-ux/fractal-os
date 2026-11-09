@@ -6,6 +6,7 @@ import { RoadmapProgress } from '@/components/Roadmap';
 import { fmtDate } from '@/lib/format';
 import { Cells } from '@/components/Cells';
 import { Icon } from '@/components/Icon';
+import { WorkflowCard } from '@/components/WorkflowCard';
 
 export default async function PortalHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -39,6 +40,10 @@ export default async function PortalHome({ params }: { params: Promise<{ slug: s
             : 'Acá vas a encontrar lo que tenés que hacer después de cada llamada y todo lo que te compartimos.'}
         </p>
       </section>
+
+      {(org.workflow?.length ?? 0) > 0 && (
+        <div style={{ marginTop: 32 }}><WorkflowCard orgId={org.id} steps={org.workflow ?? []} staff={false} clientName={org.contact_name || org.name} /></div>
+      )}
 
       {consulting && (
         <div style={{ marginTop: 32 }}>

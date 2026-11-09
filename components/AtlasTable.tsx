@@ -28,7 +28,7 @@ export function AtlasTable({ entries, initialTipo }: { entries: LabEntry[]; init
     (tipo === 'Todos' || e.tipo === tipo) &&
     (area === 'Todas' || e.area === area) &&
     (estado === 'Todos' || e.estado === estado) &&
-    (!q || `${e.title} ${e.notas ?? ''} ${e.cliente ?? ''}`.toLowerCase().includes(q.toLowerCase())),
+    (!q || `${e.title} ${e.notas ?? ''} ${e.cliente ?? ''} ${e.body ?? ''}`.toLowerCase().includes(q.toLowerCase())),
   );
 
   const changeEstado = (id: string, value: string) => {
@@ -79,6 +79,12 @@ export function AtlasTable({ entries, initialTipo }: { entries: LabEntry[]; init
                     <td colSpan={7}>
                       <div className="stack" style={{ gap: 12 }}>
                         {e.notas && <p style={{ maxWidth: '75ch', lineHeight: 1.6 }}>{e.notas}</p>}
+                        {e.body && (
+                          <details className="atlas-body" open={e.body.length < 1500}>
+                            <summary>Contenido completo{e.body.length >= 1500 ? ` (${Math.round(e.body.length / 1000)}K caracteres)` : ''}</summary>
+                            <div className="atlas-body-text">{e.body}</div>
+                          </details>
+                        )}
                         <div className="row wrap" style={{ gap: 8 }}>
                           <span className="muted small">Mover a</span>
                           {ESTADOS.filter((s) => s !== e.estado).map((s) => (

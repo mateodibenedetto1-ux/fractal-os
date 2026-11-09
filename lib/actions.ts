@@ -8,7 +8,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { kindFromUrl, materializeCall } from './process';
 import { requireStaff, requireViewer } from './data';
 import { after } from 'next/server';
-import { pushActionToNotion, syncAtlasFromNotion, syncOrgFromNotion } from './sync';
+import { pushActionToNotion, pushDirtyActions, syncAtlasFromNotion, syncOrgFromNotion } from './sync';
 import { NOTION_DB, createRow, hasNotion, isNotionId, updateRow } from './notion';
 import { asVertical } from './verticals';
 import type { Org } from './types';
@@ -422,6 +422,7 @@ export async function syncClientNow(orgId: string) {
   if (DEMO) return;
   await requireStaff();
   const sb = supabaseAdmin();
+  await pushDirtyActions(sb);
   const { data: org } = await sb.from('organizations').select('*').eq('id', orgId).single();
   if (org) await syncOrgFromNotion(sb, org as Org);
   refresh();
