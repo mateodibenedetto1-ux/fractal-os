@@ -934,7 +934,7 @@ a.panel:hover, .kpi:hover { border-color: var(--line); transform: translateY(-1p
 
 /* Laboratorio: contenido completo de la página de Notion */
 .atlas-body summary { cursor: pointer; font-size: 13px; color: var(--muted); }
-.atlas-body-text { white-space: pre-wrap; max-width: 80ch; max-height: 460px; overflow: auto; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; line-height: 1.6; }
+.atlas-body-text { max-width: 80ch; max-height: 460px; overflow: auto; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; line-height: 1.6; }
 
 /* Semáforo */
 .hl-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--line); vertical-align: middle; flex: none; }

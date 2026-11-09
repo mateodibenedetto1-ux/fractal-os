@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState, useTransition } from 'react';
 import { setLabEstado } from '@/lib/actions';
 import { ESTADOS, TIPOS, TIPO_HELP, TIPO_PLURAL } from '@/lib/lab-content';
 import type { LabEntry } from '@/lib/types';
+import { marked } from 'marked';
 
 const TIPO_TONE: Record<string, string> = {
   Falla: 'var(--brand)', Aprendizaje: 'var(--ok)', Feedback: 'var(--focus)', Experimento: 'var(--warn)',
@@ -82,7 +83,7 @@ export function AtlasTable({ entries, initialTipo }: { entries: LabEntry[]; init
                         {e.body && (
                           <details className="atlas-body" open={e.body.length < 1500}>
                             <summary>Contenido completo{e.body.length >= 1500 ? ` (${Math.round(e.body.length / 1000)}K caracteres)` : ''}</summary>
-                            <div className="atlas-body-text">{e.body}</div>
+                            <div className="atlas-body-text prose" dangerouslySetInnerHTML={{ __html: marked.parse(e.body.replace(/</g, '&lt;'), { async: false }) as string }} />
                           </details>
                         )}
                         <div className="row wrap" style={{ gap: 8 }}>
