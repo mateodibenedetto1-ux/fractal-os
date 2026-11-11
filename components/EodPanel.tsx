@@ -13,7 +13,7 @@ function StrikeRow({ s }: { s: Strike }) {
   return (
     <li className={`eod-strike ${s.status} ${pending ? 'busy' : ''}`}>
       <div className="eod-strike-main">
-        <span className="eod-strike-tag">{s.kind === 'kpi' ? 'KPI' : 'Reporte'}</span>
+        <span className="eod-strike-tag">Reporte</span>
         <span>{s.reason}</span>
         <span className="muted small">{short(s.day)} · {s.owner ?? 'Equipo'}</span>
       </div>
@@ -32,8 +32,8 @@ function StrikeRow({ s }: { s: Strike }) {
   );
 }
 
-export function EodPanel({ day, today, kpis, report, history, strikes, owners }: {
-  day: string; today: string; kpis: EodKpi[]; report: DailyReport | null; history: DailyReport[];
+export function EodPanel({ day, today, kpis, report, strikes, owners }: {
+  day: string; today: string; kpis: EodKpi[]; report: DailyReport | null;
   strikes: Strike[]; owners: { owner: string; total: number; open: number }[];
 }) {
   const [pending, start] = useTransition();
@@ -97,7 +97,7 @@ export function EodPanel({ day, today, kpis, report, history, strikes, owners }:
                 </div>
               ))}
             </div>
-            <p className="small muted">Si un KPI queda por debajo de la meta del día dos días seguidos, se genera un strike. Los KPIs se cambian cada semana en las tarjetas de abajo, según la estrategia.</p>
+            <p className="small muted">Lo que cargues acá se suma al real de la semana del semáforo. Los KPIs se cambian cada semana en las tarjetas de abajo, según la estrategia.</p>
           </details>
         )}
 
@@ -106,20 +106,7 @@ export function EodPanel({ day, today, kpis, report, history, strikes, owners }:
           {msg && <span className="small" role="status">{msg}</span>}
         </div>
 
-        {history.length > 0 && (
-          <details className="eod-history">
-            <summary className="small">Reportes anteriores</summary>
-            <ul>
-              {history.filter((h) => h.day !== day).slice(0, 10).map((h) => (
-                <li key={h.id}>
-                  <b>{short(h.day)}</b> · {h.author}{h.planned ? ` · ${h.published} de ${h.planned} publicadas` : ''}
-                  {h.done && <div className="small">{h.done}</div>}
-                  {h.blockers && <div className="small late">Bloqueos: {h.blockers}</div>}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        <a className="small" href="#reportes">Ver todos los reportes del día ↓</a>
       </form>
 
       <aside className="panel panel-pad eod-strikes">
@@ -140,7 +127,7 @@ export function EodPanel({ day, today, kpis, report, history, strikes, owners }:
         )}
         <details className="small muted eod-rules">
           <summary>Cómo funcionan</summary>
-          <p>Se genera un strike cuando un KPI diario queda por debajo de la meta del día dos días seguidos, o cuando faltan dos reportes del día seguidos (días hábiles). Se acumulan por persona. Cada strike se cierra con la medida que tomamos según la situación del cliente. Con 3 o más, se revisa en la daily.</p>
+          <p>Se genera un strike cuando faltan dos reportes del día seguidos (días hábiles). Los KPIs no generan strikes: se miden por semana en el semáforo. Los strikes se acumulan por persona. Cada strike se cierra con la medida que tomamos según la situación del cliente. Con 3 o más, se revisa en la daily.</p>
         </details>
       </aside>
     </section>

@@ -1,7 +1,8 @@
 import { getHealthBoard } from '@/lib/health';
 import { HealthBoard } from '@/components/HealthBoard';
 import { EodPanel } from '@/components/EodPanel';
-import { getEod } from '@/lib/eod';
+import { getEod, EOD_START } from '@/lib/eod';
+import { ReportsTable } from '@/components/ReportsTable';
 import { todayAR } from '@/lib/health';
 import { DEMO } from '@/lib/env';
 
@@ -40,7 +41,9 @@ export default async function Semaforo({ searchParams }: { searchParams: Promise
         </div>
       </section>
 
-      <EodPanel day={day} today={today} kpis={eod.kpis} report={eod.report} history={eod.history} strikes={eod.strikes} owners={eod.owners} />
+      <EodPanel day={day} today={today} kpis={eod.kpis} report={eod.report} strikes={eod.strikes} owners={eod.owners} />
+
+      <ReportsTable reports={eod.history} today={today} start={EOD_START} />
 
       <details className="panel panel-pad hl-help">
         <summary>Cómo se usa en la daily</summary>
