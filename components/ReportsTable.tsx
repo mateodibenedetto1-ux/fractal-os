@@ -16,7 +16,7 @@ export function ReportsTable({ reports, today, start }: { reports: DailyReport[]
   const days: string[] = [];
   for (let d = new Date(`${today}T12:00:00Z`); days.length < 30; d.setUTCDate(d.getUTCDate() - 1)) {
     const iso = d.toISOString().slice(0, 10);
-    if (iso < start) break;
+    if (iso <= start) break;
     if (isWeekday(iso) || byDay.has(iso)) days.push(iso);
   }
   const sent = days.filter((d) => byDay.has(d)).length;
